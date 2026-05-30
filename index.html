@@ -634,6 +634,28 @@ const supabaseClient = window.supabase.createClient(
   SUPABASE_ANON_KEY
 );
 
+  // ======================================
+// REGISTRATIONS CACHE
+// ======================================
+
+let ALL_REGS = [];
+
+async function loadRegistrations(){
+
+  const { data, error } = await supabaseClient
+    .from('registrations')
+    .select('*');
+
+  if(error){
+    console.error('LOAD REGS ERROR', error);
+    return;
+  }
+
+  ALL_REGS = data || [];
+
+  console.log('REGS LOADED', ALL_REGS);
+}
+
 async function testSupabase() {
   const { data, error } = await supabaseClient
     .from('users')
@@ -1398,26 +1420,49 @@ function migrateFlags(){
   if(rChanged)DB.setRegs(regs);
 }
 
-function initApp(){
+async function initApp(){
+
   document.getElementById('screen-auth').style.display='none';
+
   const app=document.getElementById('screen-app');
-  app.style.display='flex';app.style.flexDirection='column';app.style.height='100vh';
+
+  app.style.display='flex';
+  app.style.flexDirection='column';
+  app.style.height='100vh';
+
   document.getElementById('bottomnav').classList.remove('hidden');
-  document.getElementById('bn-admin').style.display=(CU.role==='admin'||CU.role==='manager')?'flex':'none';
+
+  document.getElementById('bn-admin').style.display=
+    (CU.role==='admin'||CU.role==='manager')
+      ? 'flex'
+      : 'none';
+
   migrateFlags();
-  if(CU)CU=DB.getUsers().find(x=>x.id===CU.id)||CU; // refresh after migration
+
+  if(CU)
+    CU=DB.getUsers().find(x=>x.id===CU.id)||CU;
+
   buildFlagPicker('reg-flags','reg');
   buildFlagPicker('edit-flags','edit');
+
   const evs=DB.getEvents();
+
   listEventId=evs[0]?.id||null;
   admEvent=evs[0]?.id||null;
-  // Reset emoji picker display
+
   const rd=document.getElementById('reg-flag-preview');
   if(rd)rd.textContent=DEFAULT_AVATAR;
+
   const rh=document.getElementById('reg-flag-hint');
   if(rh)rh.textContent='';
+
   regFlagSel=DEFAULT_AVATAR;
+
   applyLang();
+
+  // NOUVEAU
+  await loadRegistrations();
+
   navTo('home');
 }
 function refreshUser(){const u=DB.getUsers().find(x=>x.id===CU.id);if(u)CU=u;return CU;}
@@ -1498,9 +1543,10 @@ function renderHomeEventStatus(){
 }
 
 function renderHomeCounters(){
-  const evs=DB.getEvents(),regs=DB.getRegs();
+  const evs = DB.getEvents();
+const regs = ALL_REGS;
   document.getElementById('home-event-counters').innerHTML=evs.map(ev=>{
-    const evRegs=regs.filter(r=>r.event===ev.id);
+    const evRegs=regs.filter(r=>r.event_id===ev.id);
     let inner='';
     if(ev.type==='single'){
       inner=counterGrid(evRegs,ev);
