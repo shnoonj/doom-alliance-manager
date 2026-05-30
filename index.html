@@ -1270,31 +1270,97 @@ function authTab(tab){
   document.getElementById('reg-err').style.display='none';
 }
 async function doLogin(){
+
   const pseudo=document.getElementById('login-pseudo').value.trim();
   const pw=document.getElementById('login-pw').value;
-  if(!pseudo||!pw){showAuthErr('login',t('err_fill'));return;}
+
+  if(!pseudo||!pw){
+    showAuthErr('login',t('err_fill'));
+    return;
+  }
+
   const h=await hashPw(pw);
-  const u=DB.getUsers().find(x=>x.pseudo.toLowerCase()===pseudo.toLowerCase()&&x.pw===h);
-  if(!u){showAuthErr('login',t('err_login'));return;}
-  CU=u;initApp();
+
+  const { data: users, error } = await supabaseClient
+    .from('users')
+    .select('*')
+    .ilike('pseudo', pseudo);
+
+  if(error || !users || users.length===0){
+    showAuthErr('login',t('err_login'));
+    return;
+  }
+
+  const u = users.find(x => x.pw === h);
+
+  if(!u){
+    showAuthErr('login',t('err_login'));
+    return;
+  }
+
+  CU = u;
+
+  initApp();
 }
 async function doRegister(){
+
   const pseudo=document.getElementById('reg-pseudo').value.trim();
   const power=parseFloat(document.getElementById('reg-power').value);
   const pw=document.getElementById('reg-pw').value;
   const pw2=document.getElementById('reg-pw2').value;
+
   if(!pseudo){showAuthErr('reg',t('err_pseudo'));return;}
   if(!power||power<=0){showAuthErr('reg',t('err_power'));return;}
   if(!regUnitSel){showAuthErr('reg',t('err_unit'));return;}
   if(!pw||pw.length<4){showAuthErr('reg',t('err_pw_short'));return;}
   if(pw!==pw2){showAuthErr('reg',t('err_pw_match'));return;}
-  const users=DB.getUsers();
-  if(users.find(x=>x.pseudo.toLowerCase()===pseudo.toLowerCase())){showAuthErr('reg',t('err_pseudo_taken'));return;}
-  const h=await hashPw(pw);
-  const isFirst=users.length===0;
-  const u={id:'u_'+Date.now(),pseudo,power,flag:regFlagSel,unit:regUnitSel,pw:h,role:isFirst?'admin':'player',createdAt:new Date().toISOString()};
-  users.push(u);DB.setUsers(users);CU=u;
-  showToast(t('toast_welcome')+' '+pseudo,'success');
+
+  const { data: existing } = await supabaseClient
+    .from('users')
+    .select('pseudo')
+    .ilike('pseudo', pseudo);
+
+  if(existing && existing.length){
+    showAuthErr('reg',t('err_pseudo_taken'));
+    return;
+  }
+
+  const h = await hashPw(pw);
+
+  const { data: allUsers } = await supabaseClient
+    .from('users')
+    .select('id');
+
+  const isFirst = !allUsers || allUsers.length===0;
+
+  const newUser = {
+    pseudo,
+    power,
+    flag:regFlagSel,
+    unit:regUnitSel,
+    pw:h,
+    role:isFirst ? 'admin' : 'player'
+  };
+
+  const { data, error } = await supabaseClient
+    .from('users')
+    .insert(newUser)
+    .select()
+    .single();
+
+  if(error){
+    console.error(error);
+    showAuthErr('reg','Erreur Supabase');
+    return;
+  }
+
+  CU = data;
+
+  showToast(
+    t('toast_welcome')+' '+pseudo,
+    'success'
+  );
+
   initApp();
 }
 function showAuthErr(p,msg){const el=document.getElementById(p+'-err');if(el){el.textContent=msg;el.style.display='block';}}
