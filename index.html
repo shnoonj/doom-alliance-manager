@@ -2216,14 +2216,50 @@ function askDeleteMember(uid){
   document.getElementById('modal-delete-body').textContent=t('del_member_pre')+' "'+u.pseudo+'" '+t('del_member_post');
   document.getElementById('modal-delete-member').classList.add('active');
 }
-function confirmDeleteMember(){
-  if(!pendingDeleteId)return;
-  const uid=pendingDeleteId;
-  DB.setUsers(DB.getUsers().filter(x=>x.id!==uid));
-  DB.setRegs(DB.getRegs().filter(r=>r.userId!==uid));
-  DB.setHistory(DB.getHistory().filter(h=>h.userId!==uid));
-  closeModal('delete-member');pendingDeleteId=null;
-  showToast(t('toast_deleted'),'info');renderAdmMembers();
+async function confirmDeleteMember(){
+
+  if(!pendingDeleteId) return;
+
+  const uid = pendingDeleteId;
+
+  // Supprimer toutes ses inscriptions
+  const { error: regError } = await supabaseClient
+    .from('registrations')
+    .delete()
+    .eq('user_id', uid);
+
+  if(regError){
+    console.error(regError);
+    showToast(regError.message,'error');
+    return;
+  }
+
+  // Supprimer l'utilisateur
+  const { error: userError } = await supabaseClient
+    .from('users')
+    .delete()
+    .eq('id', uid);
+
+  if(userError){
+    console.error(userError);
+    showToast(userError.message,'error');
+    return;
+  }
+
+  await loadRegistrations();
+
+  closeModal('delete-member');
+
+  pendingDeleteId = null;
+
+  showToast(
+    t('toast_deleted'),
+    'info'
+  );
+
+  renderAdmMembers();
+  renderAdmList();
+  renderHome();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2457,11 +2493,45 @@ function openSplitModal(){
 // ═══════════════════════════════════════════════════════════════
 function openResetModal(){document.getElementById('modal-reset').classList.add('active');}
 function closeModal(id){document.getElementById('modal-'+id).classList.remove('active');}
-function doReset(){
-  const ev=getEvent(admEvent);if(!ev)return;
-  if(ev.type==='single'){DB.setRegs(DB.getRegs().filter(r=>r.event!==admEvent));}
-  else{DB.setRegs(DB.getRegs().filter(r=>!(r.event===admEvent&&(r.team===admTeam||r.team==='AB'))));}
-  closeModal('reset');showToast(t('toast_reset'),'info');renderAdmList();renderHome();
+async function doReset(){
+
+  const ev = getEvent(admEvent);
+
+  if(!ev) return;
+
+  let query = supabaseClient
+    .from('registrations')
+    .delete()
+    .eq('event_id', admEvent);
+
+  if(ev.type === 'multi'){
+    query = supabaseClient
+      .from('registrations')
+      .delete()
+      .eq('event_id', admEvent)
+      .or(`team.eq.${admTeam},team.eq.AB`);
+  }
+
+  const { error } = await query;
+
+  if(error){
+    console.error(error);
+    showToast(error.message,'error');
+    return;
+  }
+
+  await loadRegistrations();
+
+  closeModal('reset');
+
+  showToast(
+    t('toast_reset'),
+    'info'
+  );
+
+  renderAdmList();
+  renderHome();
+  renderList();
 }
 
 // ═══════════════════════════════════════════════════════════════
