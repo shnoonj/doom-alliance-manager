@@ -1562,7 +1562,7 @@ function renderHomeCounters(){
   registeredAt:r.created_at
 }));
   document.getElementById('home-event-counters').innerHTML=evs.map(ev=>{
-    const evRegs=normalizedregs.filter(r=>r.event_id===ev.id);
+    const evRegs=normalizedRegs.filter(r=>r.event_id===ev.id);
     let inner='';
     if(ev.type==='single'){
       inner=counterGrid(evRegs,ev);
