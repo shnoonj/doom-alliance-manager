@@ -1619,30 +1619,190 @@ function updateDesertUI(){
   document.getElementById('dt-b').className='desert-team-opt'+(desertTeams.B&&!both?' active-b':'')+(both?' active-both':'');
   document.getElementById('dt-both').className='desert-team-opt'+(both?' active-both':'');
 }
-function doRegisterEvent(){
-  if(!selEventId){showToast(t('no_event'),'error');return;}
-  const ev=getEvent(selEventId);if(!ev)return;
-  const regs=DB.getRegs();const now=new Date().toISOString();
-  if(ev.type==='single'){
-    if(regs.find(r=>r.userId===CU.id&&r.event===ev.id)){showToast(t('already_reg'),'error');return;}
-    regs.push({id:'r_'+Date.now(),userId:CU.id,pseudo:CU.pseudo,flag:CU.flag,power:CU.power,unit:CU.unit,event:ev.id,team:'',status:'pending',registeredAt:now});
-    showToast(t('toast_registered')+' — '+ev.name,'success');
-  }else{
-    if(!desertTeams.A&&!desertTeams.B){showToast(t('no_team'),'error');return;}
-    const teamsToReg=[];
-    if(desertTeams.A&&desertTeams.B){
-      if(regs.find(r=>r.userId===CU.id&&r.event===ev.id)){showToast(t('already_reg'),'error');return;}
-      teamsToReg.push('AB');
-    }else{
-      if(desertTeams.A){if(regs.find(r=>r.userId===CU.id&&r.event===ev.id&&(r.team==='A'||r.team==='AB'))){showToast(t('already_reg_a'),'error');return;}teamsToReg.push('A');}
-      if(desertTeams.B){if(regs.find(r=>r.userId===CU.id&&r.event===ev.id&&(r.team==='B'||r.team==='AB'))){showToast(t('already_reg_b'),'error');return;}teamsToReg.push('B');}
-    }
-    teamsToReg.forEach((team,i)=>regs.push({id:'r_'+Date.now()+'_'+i,userId:CU.id,pseudo:CU.pseudo,flag:CU.flag,power:CU.power,unit:CU.unit,event:ev.id,team,status:'pending',registeredAt:now}));
-    showToast(t('toast_registered')+' — '+ev.name+' '+t('toast_team')+' '+teamsToReg.join('+'),'success');
+async function doRegisterEvent(){
+
+  if(!selEventId){
+    showToast(t('no_event'),'error');
+    return;
   }
-  DB.setRegs(regs);selEventId=null;desertTeams={A:false,B:false};
+
+  const ev = getEvent(selEventId);
+  if(!ev) return;
+
+  const { data: existing, error: checkError } = await supabaseClient
+    .from('registrations')
+    .select('*')
+    .eq('user_id', CU.id)
+    .eq('event_id', ev.id);
+
+  if(checkError){
+    console.error(checkError);
+    showToast(checkError.message,'error');
+    return;
+  }
+
+  if(ev.type === 'single'){
+
+    if(existing && existing.length){
+      showToast(t('already_reg'),'error');
+      return;
+    }
+
+    const { error } = await supabaseClient
+      .from('registrations')
+      .insert({
+        user_id: CU.id,
+        event_id: ev.id,
+        team: ''
+      });
+
+    if(error){
+      console.error(error);
+      showToast(error.message,'error');
+      return;
+    }
+
+    showToast(
+      t('toast_registered')+' — '+ev.name,
+      'success'
+    );
+
+  }else{
+
+    if(!desertTeams.A && !desertTeams.B){
+      showToast(t('no_team'),'error');
+      return;
+    }
+
+    let team = '';
+
+    if(desertTeams.A && desertTeams.B){
+      team = 'AB';
+    }else if(desertTeams.A){
+      team = 'A';
+    }else{
+      team = 'B';
+    }
+
+    const { error } = await supabaseClient
+      .from('registrations')
+      .insert({
+        user_id: CU.id,
+        event_id: ev.id,
+        team: team
+      });
+
+    if(error){
+      console.error(error);
+      showToast(error.message,'error');
+      return;
+    }
+
+    showToast(
+      t('toast_registered')+' — '+ev.name,
+      'success'
+    );
+  }
+
+  selEventId = null;
+  desertTeams = {A:false,B:false};
+
   document.getElementById('ev-team-section').style.display='none';
-  renderEventsPage();renderHome();
+
+  renderEventsPage();
+  renderHome();
+}async function doRegisterEvent(){
+
+  if(!selEventId){
+    showToast(t('no_event'),'error');
+    return;
+  }
+
+  const ev = getEvent(selEventId);
+  if(!ev) return;
+
+  const { data: existing, error: checkError } = await supabaseClient
+    .from('registrations')
+    .select('*')
+    .eq('user_id', CU.id)
+    .eq('event_id', ev.id);
+
+  if(checkError){
+    console.error(checkError);
+    showToast(checkError.message,'error');
+    return;
+  }
+
+  if(ev.type === 'single'){
+
+    if(existing && existing.length){
+      showToast(t('already_reg'),'error');
+      return;
+    }
+
+    const { error } = await supabaseClient
+      .from('registrations')
+      .insert({
+        user_id: CU.id,
+        event_id: ev.id,
+        team: ''
+      });
+
+    if(error){
+      console.error(error);
+      showToast(error.message,'error');
+      return;
+    }
+
+    showToast(
+      t('toast_registered')+' — '+ev.name,
+      'success'
+    );
+
+  }else{
+
+    if(!desertTeams.A && !desertTeams.B){
+      showToast(t('no_team'),'error');
+      return;
+    }
+
+    let team = '';
+
+    if(desertTeams.A && desertTeams.B){
+      team = 'AB';
+    }else if(desertTeams.A){
+      team = 'A';
+    }else{
+      team = 'B';
+    }
+
+    const { error } = await supabaseClient
+      .from('registrations')
+      .insert({
+        user_id: CU.id,
+        event_id: ev.id,
+        team: team
+      });
+
+    if(error){
+      console.error(error);
+      showToast(error.message,'error');
+      return;
+    }
+
+    showToast(
+      t('toast_registered')+' — '+ev.name,
+      'success'
+    );
+  }
+
+  selEventId = null;
+  desertTeams = {A:false,B:false};
+
+  document.getElementById('ev-team-section').style.display='none';
+
+  renderEventsPage();
+  renderHome();
 }
 function cancelReg(rid){
   DB.setRegs(DB.getRegs().filter(r=>r.id!==rid));
