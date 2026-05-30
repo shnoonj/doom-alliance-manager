@@ -626,61 +626,132 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 
-  const SUPABASE_URL = 'https://ddigckjuzrvpgebvfnti.supabase.co';
+const SUPABASE_URL = 'https://ddigckjuzrvpgebvfnti.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkaWdja2p1enJ2cGdlYnZmbnRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTk2MTYsImV4cCI6MjA5NTczNTYxNn0.lXyQCIz5CmC6KLjHGWwEioRAMoHG45QybSKFgPFAJQg';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Keep alias for backward compat with older calls
+const supabaseClient = sb;
 
-const supabaseClient = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+// ═══════════════════════════════════════════════════════════════
+//  CACHE — in-memory mirrors of Supabase tables
+// ═══════════════════════════════════════════════════════════════
+const CACHE = { users:[], regs:[], history:[], events:null };
 
-  // ======================================
-// REGISTRATIONS CACHE
-// ======================================
+// ── helpers ──────────────────────────────────────────────────
+async function sbAll(table){
+  const {data,error}=await sb.from(table).select('*');
+  if(error){console.error('sbAll',table,error);return [];}
+  return data||[];
+}
 
-let ALL_REGS = [];
+// ── USERS ─────────────────────────────────────────────────────
+async function loadUsers(){
+  CACHE.users=await sbAll('users');
+  return CACHE.users;
+}
+function getUsers(){ return CACHE.users; }
+async function saveUser(u){
+  CACHE.users=CACHE.users.filter(x=>x.id!==u.id);
+  CACHE.users.push(u);
+  const {error}=await sb.from('users').upsert(u);
+  if(error)console.error('saveUser',error);
+}
+async function deleteUser(uid){
+  CACHE.users=CACHE.users.filter(x=>x.id!==uid);
+  await sb.from('users').delete().eq('id',uid);
+}
 
+// ── REGISTRATIONS ─────────────────────────────────────────────
+let ALL_REGS=[];
 async function loadRegistrations(){
-
-  const { data, error } = await supabaseClient
-    .from('registrations')
-    .select('*');
-
-  if(error){
-    console.error('LOAD REGS ERROR', error);
-    return;
-  }
-
-  ALL_REGS = data || [];
-
-  console.log('REGS LOADED', ALL_REGS);
+  ALL_REGS=await sbAll('registrations');
+  CACHE.regs=ALL_REGS;
 }
 
-async function testSupabase() {
-  const { data, error } = await supabaseClient
-    .from('users')
-    .select('*');
-
-  console.log('SUPABASE TEST', data, error);
+// ── HISTORY ───────────────────────────────────────────────────
+async function loadHistory(){
+  CACHE.history=await sbAll('history');
+  return CACHE.history;
+}
+function getHistory(){ return CACHE.history; }
+async function saveHistory(h){
+  if(!h.id)h.id=crypto.randomUUID();
+  CACHE.history=CACHE.history.filter(x=>x.id!==h.id);
+  CACHE.history.push(h);
+  const {error}=await sb.from('history').upsert(h);
+  if(error)console.error('saveHistory',error);
+}
+async function deleteHistory(id){
+  CACHE.history=CACHE.history.filter(x=>x.id!==id);
+  await sb.from('history').delete().eq('id',id);
 }
 
-testSupabase();
-  
-// ═══════════════════════════════════════════════════════════════
-//  DATABASE (localStorage)
-// ═══════════════════════════════════════════════════════════════
+// ── EVENTS ────────────────────────────────────────────────────
+async function loadEvents(){
+  const arr=await sbAll('events');
+  CACHE.events=arr.length?arr:null;
+  return getEvents();
+}
+function getEvents(){
+  return(CACHE.events&&CACHE.events.length)?CACHE.events:DEFAULT_EVENTS();
+}
+async function saveEvent(e){
+  CACHE.events=getEvents().filter(x=>x.id!==e.id);
+  CACHE.events.push(e);
+  const {error}=await sb.from('events').upsert(e);
+  if(error)console.error('saveEvent',error);
+}
+async function deleteEvent(eid){
+  CACHE.events=(CACHE.events||[]).filter(x=>x.id!==eid);
+  await sb.from('events').delete().eq('id',eid);
+}
+
+// ── DB shim (backward compat for any remaining DB.xxx calls) ──
 const DB={
-  _get(k){try{return JSON.parse(localStorage.getItem('lw_'+k))||null}catch{return null}},
-  _set(k,v){try{localStorage.setItem('lw_'+k,JSON.stringify(v))}catch{}},
-  getUsers(){return this._get('users')||[]}, setUsers(u){this._set('users',u)},
-  getRegs(){return this._get('regs')||[]},   setRegs(r){this._set('regs',r)},
-  getHistory(){return this._get('history')||[]}, setHistory(h){this._set('history',h)},
-  getEvents(){
-    const s=this._get('custom_events');
-    return(s&&s.length)?s:DEFAULT_EVENTS();
-  },
-  setEvents(e){this._set('custom_events',e)}
+  getUsers,getEvents,
+  getRegs(){return CACHE.regs;},
+  getHistory,
+  setUsers:async(arr)=>{for(const u of arr)await saveUser(u);},
+  setRegs:async()=>{},   // handled by direct supabase calls
+  setHistory:async()=>{},
+  setEvents:async(arr)=>{for(const e of arr)await saveEvent(e);}
 };
+
+// ── Realtime subscriptions ─────────────────────────────────────
+function subscribeRealtime(){
+  sb.channel('db-changes')
+    .on('postgres_changes',{event:'*',schema:'public',table:'registrations'},async()=>{
+      await loadRegistrations();
+      refreshCurrentPage();
+    })
+    .on('postgres_changes',{event:'*',schema:'public',table:'users'},async()=>{
+      await loadUsers();
+      if(CU){const fresh=getUsers().find(x=>x.id===CU.id);if(fresh)CU=fresh;}
+      refreshCurrentPage();
+    })
+    .on('postgres_changes',{event:'*',schema:'public',table:'history'},async()=>{
+      await loadHistory();
+      refreshCurrentPage();
+    })
+    .on('postgres_changes',{event:'*',schema:'public',table:'events'},async()=>{
+      await loadEvents();
+      refreshCurrentPage();
+    })
+    .subscribe();
+}
+function refreshCurrentPage(){
+  const pid=(document.querySelector('.page.active')||{}).id;
+  if(!pid||!CU)return;
+  if(pid==='page-home')renderHome();
+  else if(pid==='page-events')renderEventsPage();
+  else if(pid==='page-list')renderListTabs();
+  else if(pid==='page-profile')renderProfile();
+  else if(pid==='page-admin'){
+    if(document.getElementById('adm-tab-events').classList.contains('active'))renderAdmEventTabs();
+    else if(document.getElementById('adm-tab-members').classList.contains('active'))renderAdmMembers();
+    else if(document.getElementById('adm-tab-manage').classList.contains('active'))renderAdmManage();
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  DEFAULT EVENTS
@@ -798,14 +869,7 @@ function setEditFlag(emoji){
   if(el)el.style.display='none';
 }
 
-function migrateFlags(){
-  let users=DB.getUsers();let changed=false;
-  users=users.map(u=>{const v=toFlagCode(u.flag||'');if(v!==u.flag){u.flag=v;changed=true;}return u;});
-  if(changed)DB.setUsers(users);
-  let regs=DB.getRegs();let rc=false;
-  regs=regs.map(r=>{const v=toFlagCode(r.flag||'');if(v!==r.flag){r.flag=v;rc=true;}return r;});
-  if(rc);
-}
+
 
 // ═══════════════════════════════════════════════════════════════
 //  STATE
@@ -1400,72 +1464,46 @@ function doLogout(){
 // ═══════════════════════════════════════════════════════════════
 //  INIT APP
 // ═══════════════════════════════════════════════════════════════
-function migrateFlags(){
-  // Migrate any old emoji flags to ISO codes
-  let users=DB.getUsers();
-  let changed=false;
-  users=users.map(u=>{
-    const code=toFlagCode(u.flag||'__');
-    if(code!==u.flag){u.flag=code;changed=true;}
-    return u;
-  });
-  if(changed)DB.setUsers(users);
-  let regs=DB.getRegs();
-  let rChanged=false;
-  regs=regs.map(r=>{
-    const code=toFlagCode(r.flag||'__');
-    if(code!==r.flag){r.flag=code;rChanged=true;}
-    return r;
-  });
-  if(rChanged)DB.setRegs(regs);
-}
+
 
 async function initApp(){
+  // Show loading
+  const loadEl=document.createElement('div');
+  loadEl.id='fb-loading';
+  loadEl.style.cssText='position:fixed;inset:0;background:rgba(10,12,15,0.95);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:var(--font-head)';
+  loadEl.innerHTML='<div style="font-size:40px;margin-bottom:12px">⚔️</div><div style="color:var(--gold);font-size:18px;font-weight:700;letter-spacing:1px">'+(lang==='fr'?'Connexion…':'Connecting…')+'</div>';
+  document.body.appendChild(loadEl);
+
+  // Load all data in parallel
+  await Promise.all([loadUsers(), loadRegistrations(), loadHistory(), loadEvents()]);
+
+  // Refresh CU from cloud
+  if(CU){const fresh=getUsers().find(x=>x.id===CU.id);if(fresh)CU=fresh;}
+
+  loadEl.remove();
 
   document.getElementById('screen-auth').style.display='none';
-
   const app=document.getElementById('screen-app');
-
-  app.style.display='flex';
-  app.style.flexDirection='column';
-  app.style.height='100vh';
-
+  app.style.display='flex';app.style.flexDirection='column';app.style.height='100vh';
   document.getElementById('bottomnav').classList.remove('hidden');
-
-  document.getElementById('bn-admin').style.display=
-    (CU.role==='admin'||CU.role==='manager')
-      ? 'flex'
-      : 'none';
-
-  migrateFlags();
-
-  if(CU)
-    CU=DB.getUsers().find(x=>x.id===CU.id)||CU;
+  document.getElementById('bn-admin').style.display=(CU.role==='admin'||CU.role==='manager')?'flex':'none';
 
   buildFlagPicker('reg-flags','reg');
   buildFlagPicker('edit-flags','edit');
 
-  const evs=DB.getEvents();
-
+  const evs=getEvents();
   listEventId=evs[0]?.id||null;
   admEvent=evs[0]?.id||null;
 
-  const rd=document.getElementById('reg-flag-preview');
-  if(rd)rd.textContent=DEFAULT_AVATAR;
-
-  const rh=document.getElementById('reg-flag-hint');
-  if(rh)rh.textContent='';
-
+  const rd=document.getElementById('reg-flag-preview');if(rd)rd.textContent=DEFAULT_AVATAR;
+  const rh=document.getElementById('reg-flag-hint');if(rh)rh.textContent='';
   regFlagSel=DEFAULT_AVATAR;
 
   applyLang();
-
-  // NOUVEAU
-  await loadRegistrations();
-
+  subscribeRealtime();
   navTo('home');
 }
-function refreshUser(){const u=DB.getUsers().find(x=>x.id===CU.id);if(u)CU=u;return CU;}
+function refreshUser(){const u=getUsers().find(x=>x.id===CU.id);if(u)CU=u;return CU;}
 
 // ═══════════════════════════════════════════════════════════════
 //  NAVIGATION
@@ -1485,7 +1523,7 @@ function navTo(page){
 // ═══════════════════════════════════════════════════════════════
 //  EVENT HELPERS
 // ═══════════════════════════════════════════════════════════════
-function getEvent(id){return DB.getEvents().find(e=>e.id===id);}
+function getEvent(id){return getEvents().find(e=>e.id===id);}
 function evStyle(ev){return `background:linear-gradient(135deg,${ev.colorDark},var(--bg2));border-color:${ev.colorBorder}`;}
 function evCardStyle(ev,isActive){
   const base=`background:linear-gradient(135deg,${ev.colorDark},var(--bg3));border-color:${isActive?ev.color:ev.colorBorder}`;
@@ -1517,8 +1555,7 @@ function renderHome(){
 }
 
 function renderHomeEventStatus(){
-
-  const evs = DB.getEvents();
+  const evs = getEvents();
 
   const regs = ALL_REGS.map(r=>({
     ...r,
@@ -1553,7 +1590,7 @@ function renderHomeEventStatus(){
 }
 
 function renderHomeCounters(){
-  const evs = DB.getEvents();
+  const evs = getEvents();
   const regs = ALL_REGS;
   const normalizedRegs = regs.map(r=>({
   ...r,
@@ -1597,14 +1634,14 @@ function counterGrid(list,ev){
 // ═══════════════════════════════════════════════════════════════
 function renderEventsPage(){
   if(!CU)return;refreshUser();
-  const evs=DB.getEvents();
+  const evs=getEvents();
   const grid=document.getElementById('ev-event-grid');
   grid.innerHTML=evs.map(ev=>`<div class="event-card" id="ec-${ev.id}" onclick="selectEvent('${ev.id}')" style="${evCardStyle(ev,selEventId===ev.id)}">
     <div class="ev-icon">${ev.emoji}</div>
     <h3 style="color:${ev.colorText}">${evName(ev)}</h3>
     <p>${ev.type==='single'?teamTimeLabel(ev,''):t('times_by_team')}</p>
   </div>`).join('');
-  const myRegs=DB.getRegs().filter(r=>r.userId===CU.id);
+  const myRegs=ALL_REGS.filter(r=>r.user_id===CU.id).map(r=>({...r,userId:r.user_id,event:r.event_id,registeredAt:r.created_at}));
   const sm={pending:t('st_pending'),selected:t('st_selected'),reserve:t('st_reserve'),miss:t('st_miss'),absent:t('st_absent')};
   const bm={pending:'badge-gray',selected:'badge-green',reserve:'badge-orange',miss:'badge-gray',absent:'badge-red'};
   const elMyRegs=document.getElementById('ev-my-regs');
@@ -1625,11 +1662,11 @@ function renderEventsPage(){
   // History warnings — show only when the player's current reg for that event/team is still pending
   const warns=[];
   const myRegsIds=new Set(myRegs.map(r=>r.event+'_'+(r.team||'')));
-  DB.getHistory().filter(h=>h.userId===CU.id).forEach(h=>{
+  getHistory().filter(h=>h.user_id===CU.id||h.userId===CU.id).forEach(h=>{
     if(!['absent','miss'].includes(h.status))return;
-    const ev=getEvent(h.event);const evN=ev?evName(ev):h.event;
+    const evId=h.event_id||h.event;const ev=getEvent(evId);const evN=ev?evName(ev):evId;
     // Find if player has a current pending reg for this event+team
-    const currentReg=myRegs.find(r=>r.event===h.event&&(
+    const hEvId=h.event_id||h.event;const currentReg=myRegs.find(r=>(r.event_id===hEvId||r.event===hEvId)&&(
       ev?.type==='single'||r.team===h.team||r.team==='AB'||h.team===''
     ));
     // Show warning if no current reg yet, or current reg is still pending
@@ -1648,7 +1685,7 @@ function renderEventsPage(){
 
 function selectEvent(id){
   selEventId=id;selSingleTeam=null;desertTeams={A:false,B:false};
-  const evs=DB.getEvents();
+  const evs=getEvents();
   evs.forEach(ev=>{
     const el=document.getElementById('ec-'+ev.id);
     if(el)el.setAttribute('style',evCardStyle(ev,ev.id===id));
@@ -1780,105 +1817,6 @@ async function doRegisterEvent(){
 
   renderEventsPage();
   renderHome();
-}async function doRegisterEvent(){
-
-  if(!selEventId){
-    showToast(t('no_event'),'error');
-    return;
-  }
-
-  const ev = getEvent(selEventId);
-  if(!ev) return;
-
-  const { data: existing, error: checkError } = await supabaseClient
-    .from('registrations')
-    .select('*')
-    .eq('user_id', CU.id)
-    .eq('event_id', ev.id);
-
-  if(checkError){
-    console.error(checkError);
-    showToast(checkError.message,'error');
-    return;
-  }
-
-  if(ev.type === 'single'){
-
-    if(existing && existing.length){
-      showToast(t('already_reg'),'error');
-      return;
-    }
-
-    const { error } = await supabaseClient
-      .from('registrations')
-      .insert({
-        user_id: CU.id,
-        event_id: ev.id,
-        team: ''
-      });
-
-    if(error){
-      console.error(error);
-      showToast(error.message,'error');
-      return;
-    }
-
-    showToast(
-      t('toast_registered')+' — '+ev.name,
-      'success'
-    );
-
-  }else{
-
-    if(!desertTeams.A && !desertTeams.B){
-      showToast(t('no_team'),'error');
-      return;
-    }
-
-    let team = '';
-
-    if(desertTeams.A && desertTeams.B){
-      team = 'AB';
-    }else if(desertTeams.A){
-      team = 'A';
-    }else{
-      team = 'B';
-    }
-
-    const { error } = await supabaseClient
-      .from('registrations')
-      .insert({
-  user_id: CU.id,
-  event_id: ev.id,
-  team: team,
-
-  pseudo: CU.pseudo,
-  power: CU.power,
-  unit: CU.unit,
-  flag: CU.flag,
-
-  status: 'pending'
-});
-
-    if(error){
-      console.error(error);
-      showToast(error.message,'error');
-      return;
-    }
-
-    showToast(
-      t('toast_registered')+' — '+ev.name,
-      'success'
-    );
-  }
-
-  selEventId = null;
-  desertTeams = {A:false,B:false};
-
-  document.getElementById('ev-team-section').style.display='none';
-
-  renderEventsPage();
-  renderHome();
 }
 async function cancelReg(rid){
 
@@ -1909,7 +1847,7 @@ async function cancelReg(rid){
 //  LIST PAGE
 // ═══════════════════════════════════════════════════════════════
 function renderListTabs(){
-  const evs=DB.getEvents();
+  const evs=getEvents();
   if(!listEventId||!evs.find(e=>e.id===listEventId))listEventId=evs[0]?.id||null;
   const tabEl=document.getElementById('list-event-tabs');
   tabEl.innerHTML=evs.map(ev=>`<div class="tab${ev.id===listEventId?' active':''}" onclick="listSelectEvent('${ev.id}')">${ev.emoji} ${evName(ev)}</div>`).join('');
@@ -1918,7 +1856,7 @@ function renderListTabs(){
 }
 function listSelectEvent(id){
   listEventId=id;listTeam='A';
-  document.querySelectorAll('#list-event-tabs .tab').forEach((tab,i)=>{const evs=DB.getEvents();tab.classList.toggle('active',evs[i]?.id===id);});
+  document.querySelectorAll('#list-event-tabs .tab').forEach((tab,i)=>{const evs=getEvents();tab.classList.toggle('active',evs[i]?.id===id);});
   renderListTeamTabs();renderList();
 }
 function renderListTeamTabs(){
@@ -1941,7 +1879,7 @@ let regs =
           r.event_id === listEventId &&
           (r.team === listTeam || r.team === 'AB')
       );
-  const sorted=[...regs].sort((a,b)=>new Date(a.registeredAt)-new Date(b.registeredAt));
+  const sorted=[...regs].map(r=>({...r,pseudo:r.pseudo||'?',power:r.power||0,flag:r.flag||DEFAULT_AVATAR,unit:r.unit||'',userId:r.user_id||r.userId,event:r.event_id||r.event,registeredAt:r.created_at||r.registeredAt})).sort((a,b)=>new Date(a.registeredAt)-new Date(b.registeredAt));
   const total=sorted.length,sel=sorted.filter(r=>r.status==='selected').length,res=sorted.filter(r=>r.status==='reserve').length,pend=sorted.filter(r=>r.status==='pending').length;
   document.getElementById('list-stats').innerHTML=`
     <div class="stat-box"><div class="num">${total}</div><div class="lbl">${t('total')}</div></div>
@@ -1952,14 +1890,15 @@ let regs =
     document.getElementById('list-content').innerHTML=`<div class="empty"><div class="empty-icon">📋</div><p>${t('no_regs')}</p></div>`;
     return;
   }
-  const hist=DB.getHistory();
+  const hist=getHistory();
   const sl={pending:t('st_pending'),selected:t('st_selected'),reserve:t('st_reserve'),miss:t('st_miss'),absent:t('st_absent')};
   const bg={pending:'badge-gray',selected:'badge-green',reserve:'badge-orange',miss:'badge-gray',absent:'badge-red'};
   document.getElementById('list-content').innerHTML=sorted.map((r,i)=>{
     const lookupTeams=r.team==='AB'?[listTeam]:r.team?[r.team]:[''];
+    const rUid=r.user_id||r.userId;
     const h=ev.type==='multi'
-      ?hist.find(x=>x.userId===r.userId&&x.event===listEventId&&lookupTeams.includes(x.team))
-      :hist.find(x=>x.userId===r.userId&&x.event===listEventId);
+      ?hist.find(x=>(x.user_id||x.userId)===rUid&&(x.event_id||x.event)===listEventId&&lookupTeams.includes(x.team))
+      :hist.find(x=>(x.user_id||x.userId)===rUid&&(x.event_id||x.event)===listEventId);
     let hb='';
     if(h&&r.status==='pending'){
       if(h.status==='absent')hb=`<span title="${t('absent_prev')}">🔴</span>`;
@@ -2001,11 +1940,11 @@ function renderProfile(){
   renderProfileHistory();
 }
 function renderProfileHistory(){
-  const hist=DB.getHistory().filter(h=>h.userId===CU.id);
-  const regs=DB.getRegs().filter(r=>r.userId===CU.id);
+  const hist=getHistory().filter(h=>(h.user_id||h.userId)===CU.id);
+  const regs=ALL_REGS.filter(r=>r.user_id===CU.id);
   const el=document.getElementById('prof-history');
   if(!hist.length&&!regs.length){el.innerHTML=`<div style="color:var(--text3);font-size:14px">${t('no_history')}</div>`;return;}
-  const all=[...hist.map(h=>({...h,cur:false})),...regs.map(r=>({userId:r.userId,event:r.event,team:r.team,status:r.status,date:r.registeredAt,cur:true}))];
+  const all=[...hist.map(h=>({...h,event:h.event_id||h.event,cur:false})),...regs.map(r=>({userId:r.user_id,event:r.event_id,team:r.team,status:r.status,date:r.created_at,cur:true}))];
   const sl={pending:t('st_pending'),selected:t('st_selected'),reserve:t('st_reserve'),miss:t('st_miss'),absent:t('st_absent')};
   const bg={pending:'badge-gray',selected:'badge-green',reserve:'badge-orange',miss:'badge-gray',absent:'badge-red'};
   el.innerHTML=all.map(h=>{
@@ -2026,13 +1965,21 @@ async function saveProfile(){
   if(!pseudo){showToast(t('err_pseudo_empty'),'error');return;}
   if(!power||power<=0){showToast(t('err_power_invalid'),'error');return;}
   if(!editUnitSel){showToast(t('err_unit'),'error');return;}
-  const users=DB.getUsers();
-  if(users.find(x=>x.pseudo.toLowerCase()===pseudo.toLowerCase()&&x.id!==CU.id)){showToast(t('err_pseudo_taken'),'error');return;}
-  const idx=users.findIndex(x=>x.id===CU.id);if(idx===-1)return;
-  users[idx].pseudo=pseudo;users[idx].power=power;users[idx].flag=editFlagSel;users[idx].unit=editUnitSel;
-  if(pw&&pw.length>=4)users[idx].pw=await hashPw(pw);
-  DB.setRegs(DB.getRegs().map(r=>{if(r.userId===CU.id){r.pseudo=pseudo;r.flag=editFlagSel;r.power=power;r.unit=editUnitSel;}return r;}));
-  DB.setUsers(users);CU=users[idx];
+  if(getUsers().find(x=>x.pseudo.toLowerCase()===pseudo.toLowerCase()&&x.id!==CU.id)){showToast(t('err_pseudo_taken'),'error');return;}
+
+  // Build update object
+  const updates={pseudo,power,flag:editFlagSel,unit:editUnitSel};
+  if(pw&&pw.length>=4)updates.password=await hashPw(pw);
+
+  const{error}=await sb.from('users').update(updates).eq('id',CU.id);
+  if(error){showToast(error.message,'error');return;}
+
+  // Update registrations with new pseudo/flag/power/unit
+  await sb.from('registrations').update({pseudo,flag:editFlagSel,power,unit:editUnitSel}).eq('user_id',CU.id);
+
+  // Refresh local cache
+  await loadUsers();await loadRegistrations();
+  CU={...CU,...updates};
   showToast(t('toast_profile'),'success');renderProfile();renderHome();
 }
 
@@ -2050,7 +1997,7 @@ function admTab(tab){
   else if(tab==='manage')renderAdmManage();
 }
 function renderAdmEventTabs(){
-  const evs=DB.getEvents();
+  const evs=getEvents();
   if(!admEvent||!evs.find(e=>e.id===admEvent))admEvent=evs[0]?.id||null;
   const tabEl=document.getElementById('adm-ev-tabs');
   tabEl.innerHTML=evs.map(ev=>`<div class="tab${ev.id===admEvent?' active':''}" onclick="admSelectEvent('${ev.id}')">${ev.emoji} ${evName(ev)}</div>`).join('');
@@ -2085,8 +2032,8 @@ function renderAdmList(){
           r.event_id === listEventId &&
           (r.team === listTeam || r.team === 'AB')
       );
-  const sorted=[...regs].sort((a,b)=>new Date(a.registeredAt)-new Date(b.registeredAt));
-  const hist=DB.getHistory();
+  const sorted=[...regs].map(r=>({...r,pseudo:r.pseudo||'?',power:r.power||0,flag:r.flag||DEFAULT_AVATAR,unit:r.unit||'',userId:r.user_id||r.userId,event:r.event_id||r.event,registeredAt:r.created_at||r.registeredAt})).sort((a,b)=>new Date(a.registeredAt)-new Date(b.registeredAt));
+  const hist=getHistory();
   const total=sorted.length,sel=sorted.filter(r=>r.status==='selected').length,res=sorted.filter(r=>r.status==='reserve').length,abs=sorted.filter(r=>r.status==='absent').length;
   document.getElementById('adm-stats').innerHTML=`
     <div class="stat-box"><div class="num">${total}</div><div class="lbl">${t('total')}</div></div>
@@ -2102,9 +2049,11 @@ function renderAdmList(){
     // A player registered AB has entries saved as 'A' and 'B' individually.
     // We look for the relevant team entry.
     const lookupTeams=r.team==='AB'?[admTeam]:r.team?[r.team]:[''];
+    const rUid2=r.user_id||r.userId;
+    const rEid=r.event_id||r.event;
     const h=hist.find(x=>
-      x.userId===r.userId &&
-      x.event===r.event &&
+      (x.user_id||x.userId)===rUid2 &&
+      (x.event_id||x.event)===rEid &&
       (ev.type==='single' || lookupTeams.includes(x.team))
     );
     // Only show badge if history status differs from current status
@@ -2145,46 +2094,46 @@ function renderAdmList(){
   }).join('');
 }
 async function setRegStatus(rid,status){
+  const r=ALL_REGS.find(x=>x.id===rid);if(!r)return;
+  const newStatus=r.status===status?'pending':status;
 
-  const r = ALL_REGS.find(x => x.id === rid);
+  const{error}=await sb.from('registrations').update({status:newStatus}).eq('id',rid);
+  if(error){console.error(error);showToast(error.message,'error');return;}
 
-  if(!r) return;
-
-  const newStatus =
-    r.status === status
-      ? 'pending'
-      : status;
-
-  const { error } = await supabaseClient
-    .from('registrations')
-    .update({
-      status: newStatus
-    })
-    .eq('id', rid);
-
-  if(error){
-    console.error(error);
-    showToast(error.message,'error');
-    return;
+  // Save history entry for miss/absent/selected
+  if(['miss','absent','selected','reserve'].includes(newStatus)){
+    // Remove previous entry for same user/event/team
+    const uid=r.user_id||r.userId;
+    const eid=r.event_id||r.event;
+    const ev=getEvent(eid);
+    const teams=r.team==='AB'?['A','B']:(r.team?[r.team]:['']);
+    const toDelete=getHistory().filter(h=>
+      (h.user_id||h.userId)===uid &&
+      (h.event_id||h.event)===eid &&
+      (ev?.type==='single'||teams.includes(h.team))
+    );
+    for(const h of toDelete)await deleteHistory(h.id);
+    for(const team of teams){
+      await saveHistory({
+        user_id:uid, userId:uid,
+        event_id:eid, event:eid,
+        team:team||'', status:newStatus,
+        date:new Date().toISOString()
+      });
+    }
   }
 
   await loadRegistrations();
-
-  renderAdmList();
-  renderHome();
-  renderList();
-
-  showToast(
-    'Statut mis à jour',
-    'success'
-  );
+  await loadHistory();
+  renderAdmList();renderHome();renderList();
+  showToast(t('st_'+newStatus)||'Mis à jour','success');
 }
 
 // ═══════════════════════════════════════════════════════════════
 //  ADMIN — MEMBERS
 // ═══════════════════════════════════════════════════════════════
 function renderAdmMembers(){
-  const users=DB.getUsers().sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
+  const users=getUsers().sort((a,b)=>new Date(a.created_at||a.createdAt)-new Date(b.created_at||b.createdAt));
   const el=document.getElementById('adm-members-list');
   const rcM={admin:'gold',manager:'blue',player:'gray'};
   const rlM={admin:t('role_admin'),manager:t('role_manager'),player:t('role_player')};
@@ -2194,7 +2143,7 @@ function renderAdmMembers(){
       <div class="player-avatar">${flagHTML(u.flag,18)}</div>
       <div class="player-info">
         <div class="player-name">${escHtml(u.pseudo)} ${unitIconHTML(u.unit,14)}</div>
-        <div class="player-meta">⚡${u.power}M • ${t('joined')} ${fmtDate(u.createdAt)}</div>
+        <div class="player-meta">⚡${u.power}M • ${t('joined')} ${fmtDate(u.created_at||u.createdAt)}</div>
       </div>
       <span class="badge badge-${rcM[u.role]||'gray'}">${rlM[u.role]||u.role}</span>
     </div>
@@ -2206,13 +2155,16 @@ function renderAdmMembers(){
     </div>`:''}
   </div>`).join('');
 }
-function setRole(uid,role){
-  const users=DB.getUsers(),u=users.find(x=>x.id===uid);if(!u)return;
-  u.role=role;DB.setUsers(users);showToast(u.pseudo+' → '+role,'success');renderAdmMembers();renderHome();
+async function setRole(uid,role){
+  const u=getUsers().find(x=>x.id===uid);if(!u)return;
+  const{error}=await sb.from('users').update({role}).eq('id',uid);
+  if(error){showToast(error.message,'error');return;}
+  await loadUsers();
+  showToast(u.pseudo+' → '+role,'success');renderAdmMembers();renderHome();
 }
 function askDeleteMember(uid){
   pendingDeleteId=uid;
-  const u=DB.getUsers().find(x=>x.id===uid);if(!u)return;
+  const u=getUsers().find(x=>x.id===uid);if(!u)return;
   document.getElementById('modal-delete-body').textContent=t('del_member_pre')+' "'+u.pseudo+'" '+t('del_member_post');
   document.getElementById('modal-delete-member').classList.add('active');
 }
@@ -2266,11 +2218,11 @@ async function confirmDeleteMember(){
 //  ADMIN — EVENTS MANAGEMENT
 // ═══════════════════════════════════════════════════════════════
 function renderAdmManage(){
-  const evs=DB.getEvents();
+  const evs=getEvents();
   const el=document.getElementById('adm-events-list');
   el.innerHTML=evs.map(ev=>{
     const isDefault=ev.id==='canyon'||ev.id==='desert';
-    const regCount=DB.getRegs().filter(r=>r.event===ev.id).length;
+    const regCount=ALL_REGS.filter(r=>r.event_id===ev.id).length;
     const timeInfo=ev.type==='single'
       ?(ev.timeFR+' · '+ev.timeSRV)
       :'A: '+ev.timeAFR+' · '+ev.timeASRV+' | B: '+ev.timeBFR+' · '+ev.timeBSRV;
@@ -2294,16 +2246,16 @@ function askDeleteEvent(id){
   document.getElementById('modal-delete-event-body').textContent=t('del_event_pre')+' "'+evName(ev)+'" '+t('del_event_post');
   document.getElementById('modal-delete-event').classList.add('active');
 }
-function confirmDeleteEvent(){
+async function confirmDeleteEvent(){
   if(!pendingDeleteEventId)return;
   const id=pendingDeleteEventId;
-  const evs=DB.getEvents().filter(e=>e.id!==id);
-  DB.setEvents(evs);
-  DB.setRegs(DB.getRegs().filter(r=>r.event!==id));
-  DB.setHistory(DB.getHistory().filter(h=>h.event!==id));
+  await sb.from('registrations').delete().eq('event_id',id);
+  await sb.from('history').delete().eq('event_id',id);
+  await deleteEvent(id);
   closeModal('delete-event');pendingDeleteEventId=null;
   showToast(t('toast_ev_deleted'),'info');
-  admEvent=evs[0]?.id||null;
+  await loadRegistrations();await loadHistory();
+  const evs=getEvents();admEvent=evs[0]?.id||null;
   renderAdmManage();renderAdmEventTabs();renderHome();
 }
 
@@ -2360,7 +2312,7 @@ function confirmCreateEvent(){
     newEv.timeBFR=document.getElementById('nev-b-fr').value||'—';
     newEv.timeBSRV=document.getElementById('nev-b-srv').value||'—';
   }
-  const evs=DB.getEvents();evs.push(newEv);DB.setEvents(evs);
+  await saveEvent(newEv);
   closeModal('create-event');
   showToast(t('toast_ev_created')+' : '+name,'success');
   renderAdmManage();renderAdmEventTabs();renderHome();renderEventsPage();
@@ -2410,8 +2362,7 @@ function confirmEditEvent(){
   // Check if type changed — warn about clearing registrations if needed
   const typeChanged=eedTypeSel!==ev.type;
 
-  // Save to DB
-  const evs=DB.getEvents();
+  const evs=[...getEvents()];
   const idx=evs.findIndex(e=>e.id===editingEventId);
   if(idx===-1)return;
   evs[idx].name=nameFR;
@@ -2433,13 +2384,14 @@ function confirmEditEvent(){
     delete evs[idx].timeFR;delete evs[idx].timeSRV;
   }
 
-  // If type changed, clear registrations for this event (structure incompatible)
+  await saveEvent(evs[idx]);
+
   if(typeChanged){
-    DB.setRegs(DB.getRegs().filter(r=>r.event!==editingEventId));
-    DB.setHistory(DB.getHistory().filter(h=>h.event!==editingEventId));
+    await sb.from('registrations').delete().eq('event_id',editingEventId);
+    await sb.from('history').delete().eq('event_id',editingEventId);
+    await loadRegistrations();await loadHistory();
   }
 
-  DB.setEvents(evs);
   closeModal('edit-event');editingEventId=null;
   showToast(t('toast_ev_saved'),'success');
   renderAdmManage();renderAdmEventTabs();renderHome();renderEventsPage();
@@ -2451,7 +2403,7 @@ function confirmEditEvent(){
 // ═══════════════════════════════════════════════════════════════
 function openSplitModal(){
   const ev=getEvent(admEvent);
-  const allRegs=DB.getRegs().filter(r=>r.event===admEvent);
+  const allRegs=ALL_REGS.filter(r=>r.event_id===admEvent).map(r=>({...r,pseudo:r.pseudo||'?',power:r.power||0,flag:r.flag||DEFAULT_AVATAR,unit:r.unit||'',userId:r.user_id,event:r.event_id}));
   const selected=allRegs.filter(r=>r.status==='selected');
   const reserves=allRegs.filter(r=>r.status==='reserve');
   const el=document.getElementById('modal-split-content');
