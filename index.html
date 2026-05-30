@@ -1738,10 +1738,17 @@ async function doRegisterEvent(){
     const { error } = await supabaseClient
       .from('registrations')
       .insert({
-        user_id: CU.id,
-        event_id: ev.id,
-        team: team
-      });
+  user_id: CU.id,
+  event_id: ev.id,
+  team: team,
+
+  pseudo: CU.pseudo,
+  power: CU.power,
+  unit: CU.unit,
+  flag: CU.flag,
+
+  status: 'pending'
+});
 
     if(error){
       console.error(error);
@@ -1830,10 +1837,17 @@ async function doRegisterEvent(){
     const { error } = await supabaseClient
       .from('registrations')
       .insert({
-        user_id: CU.id,
-        event_id: ev.id,
-        team: team
-      });
+  user_id: CU.id,
+  event_id: ev.id,
+  team: team,
+
+  pseudo: CU.pseudo,
+  power: CU.power,
+  unit: CU.unit,
+  flag: CU.flag,
+
+  status: 'pending'
+});
 
     if(error){
       console.error(error);
@@ -1889,9 +1903,14 @@ function listSelectTeam(tm){listTeam=tm;renderListTeamTabs();renderList();}
 function renderList(){
   const ev=getEvent(listEventId);
   if(!ev){document.getElementById('list-content').innerHTML='';return;}
-  let regs=ev.type==='single'
-    ?DB.getRegs().filter(r=>r.event===listEventId)
-    :DB.getRegs().filter(r=>r.event===listEventId&&(r.team===listTeam||r.team==='AB'));
+let regs =
+  ev.type === 'single'
+    ? ALL_REGS.filter(r => r.event_id === listEventId)
+    : ALL_REGS.filter(
+        r =>
+          r.event_id === listEventId &&
+          (r.team === listTeam || r.team === 'AB')
+      );
   const sorted=[...regs].sort((a,b)=>new Date(a.registeredAt)-new Date(b.registeredAt));
   const total=sorted.length,sel=sorted.filter(r=>r.status==='selected').length,res=sorted.filter(r=>r.status==='reserve').length,pend=sorted.filter(r=>r.status==='pending').length;
   document.getElementById('list-stats').innerHTML=`
@@ -2028,9 +2047,14 @@ function admSelectTeam(tm){
 function renderAdmList(){
   const ev=getEvent(admEvent);
   if(!ev){document.getElementById('adm-list').innerHTML='';return;}
-  let regs=ev.type==='single'
-    ?DB.getRegs().filter(r=>r.event===admEvent)
-    :DB.getRegs().filter(r=>r.event===admEvent&&(r.team===admTeam||r.team==='AB'));
+ let regs =
+  ev.type === 'single'
+    ? ALL_REGS.filter(r => r.event_id === listEventId)
+    : ALL_REGS.filter(
+        r =>
+          r.event_id === listEventId &&
+          (r.team === listTeam || r.team === 'AB')
+      );
   const sorted=[...regs].sort((a,b)=>new Date(a.registeredAt)-new Date(b.registeredAt));
   const hist=DB.getHistory();
   const total=sorted.length,sel=sorted.filter(r=>r.status==='selected').length,res=sorted.filter(r=>r.status==='reserve').length,abs=sorted.filter(r=>r.status==='absent').length;
