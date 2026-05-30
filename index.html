@@ -804,7 +804,7 @@ function migrateFlags(){
   if(changed)DB.setUsers(users);
   let regs=DB.getRegs();let rc=false;
   regs=regs.map(r=>{const v=toFlagCode(r.flag||'');if(v!==r.flag){r.flag=v;rc=true;}return r;});
-  if(rc)DB.setRegs(regs);
+  if(rc);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1880,10 +1880,29 @@ async function doRegisterEvent(){
   renderEventsPage();
   renderHome();
 }
-function cancelReg(rid){
-  DB.setRegs(DB.getRegs().filter(r=>r.id!==rid));
-  showToast(t('toast_cancelled'),'info');
-  renderEventsPage();renderHome();
+async function cancelReg(rid){
+
+  const { error } = await supabaseClient
+    .from('registrations')
+    .delete()
+    .eq('id', rid);
+
+  if(error){
+    console.error(error);
+    showToast(error.message,'error');
+    return;
+  }
+
+  await loadRegistrations();
+
+  showToast(
+    t('toast_cancelled'),
+    'info'
+  );
+
+  renderEventsPage();
+  renderHome();
+  renderList();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2125,30 +2144,40 @@ function renderAdmList(){
     </div>`;
   }).join('');
 }
-function setRegStatus(rid,status){
-  const regs=DB.getRegs(),r=regs.find(x=>x.id===rid);if(!r)return;
-  if(r.status===status){
-    r.status='pending';
-  }else{
-    r.status=status;
-    const ev=getEvent(r.event);
-    // Determine which teams this registration covers
-    const teams=r.team==='AB'?['A','B']:(r.team?[r.team]:['']);
-    // Remove existing history entries for this user/event/teams combo (current week only)
-    let hist=DB.getHistory().filter(h=>{
-      if(h.userId!==r.userId||h.event!==r.event)return true;
-      if(ev?.type==='single')return false; // remove single-team entry
-      return !teams.includes(h.team); // remove only matching teams
-    });
-    // Save one history entry per team
-    if(['absent','miss','selected','reserve'].includes(status)){
-      teams.forEach(team=>{
-        hist.push({userId:r.userId,event:r.event,team:team||'',status,date:new Date().toISOString()});
-      });
-    }
-    DB.setHistory(hist);
+async function setRegStatus(rid,status){
+
+  const r = ALL_REGS.find(x => x.id === rid);
+
+  if(!r) return;
+
+  const newStatus =
+    r.status === status
+      ? 'pending'
+      : status;
+
+  const { error } = await supabaseClient
+    .from('registrations')
+    .update({
+      status: newStatus
+    })
+    .eq('id', rid);
+
+  if(error){
+    console.error(error);
+    showToast(error.message,'error');
+    return;
   }
-  DB.setRegs(regs);renderAdmList();
+
+  await loadRegistrations();
+
+  renderAdmList();
+  renderHome();
+  renderList();
+
+  showToast(
+    'Statut mis à jour',
+    'success'
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
