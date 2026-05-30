@@ -1293,7 +1293,7 @@ async function doLogin(){
     return;
   }
 
-  const u = users.find(x => x.pw === h);
+  const u = users.find(x => x.password === h);
 
   if(!u){
     showAuthErr('login',t('err_login'));
@@ -1336,13 +1336,13 @@ async function doRegister(){
   const isFirst = !allUsers || allUsers.length===0;
 
   const newUser = {
-    pseudo,
-    power,
-    flag:regFlagSel,
-    unit:regUnitSel,
-    pw:h,
-    role:isFirst ? 'admin' : 'player'
-  };
+  pseudo,
+  password: h,
+  power,
+  flag: regFlagSel,
+  unit: regUnitSel,
+  role: isFirst ? 'admin' : 'player'
+};
 
   const { data, error } = await supabaseClient
     .from('users')
@@ -1351,10 +1351,10 @@ async function doRegister(){
     .single();
 
   if(error){
-    console.error(error);
-    showAuthErr('reg','Erreur Supabase');
-    return;
-  }
+  console.error(error);
+  showAuthErr('reg', error.message);
+  return;
+}
 
   CU = data;
 
