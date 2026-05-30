@@ -604,7 +604,7 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
       </div>
     </div>
     <div id="eed-multi-times" style="display:none">
-      <div style="font-family:var(--font-head);font-size:13px;color:var(--blue);margin-bottom:8px;font-weight:700">u2694ufe0f TEAM A</div>
+      <div style="font-family:var(--font-head);font-size:13px;color:var(--blue);margin-bottom:8px;font-weight:700">⚔️ TEAM A</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="field"><label id="lbl-eed-a-fr"></label><input type="text" id="eed-a-fr"></div>
         <div class="field"><label id="lbl-eed-a-srv"></label><input type="text" id="eed-a-srv"></div>
@@ -1155,6 +1155,9 @@ en:{
 // Single lookup — always use this
 function t(k){ return (I18N[lang]||I18N.fr)[k]||k; }
 
+function set(id,txt){const el=document.getElementById(id);if(el)el.textContent=txt;}
+function setAttr(id,attr,val){const el=document.getElementById(id);if(el)el.setAttribute(attr,val);}
+
 // ═══════════════════════════════════════════════════════════════
 //  applyLang — refreshes ALL static labels in one pass
 //  Called on boot and on every language toggle
@@ -1312,8 +1315,7 @@ function applyLang(){
   }
 }
 
-function set(id,txt){const el=document.getElementById(id);if(el)el.textContent=txt;}
-function setAttr(id,attr,val){const el=document.getElementById(id);if(el)el.setAttribute(attr,val);}
+
 
 function toggleLang(){
   lang=lang==='fr'?'en':'fr';
@@ -2504,10 +2506,12 @@ function showToast(msg,type='info'){
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  STARTUP
+//  STARTUP — wait for DOM before running anything
 // ═══════════════════════════════════════════════════════════════
-applyLang();
-buildFlagPicker('reg-flags','reg');
+document.addEventListener('DOMContentLoaded', function(){
+  applyLang();
+  buildFlagPicker('reg-flags','reg');
+});
 </script>
 </body>
 </html>
