@@ -185,7 +185,6 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
 .ttype-opt{border:1.5px solid var(--border2);border-radius:var(--radius-sm);padding:12px 8px;cursor:pointer;text-align:center;transition:all 0.15s;background:var(--bg3);font-family:var(--font-head);font-size:14px;font-weight:700;color:var(--text2)}
 .ttype-opt.active{border-color:var(--gold);background:var(--gold-dim);color:var(--gold)}
 </style>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -622,18 +621,18 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
 </div>
 
 <div class="toast" id="toast"></div>
-
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 
-  const SUPABASE_URL = 'https://ddigckjuzrvpgebvfnti.supabase.co/rest/v1/';
+  const SUPABASE_URL = 'https://ddigckjuzrvpgebvfnti.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkaWdja2p1enJ2cGdlYnZmbnRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTk2MTYsImV4cCI6MjA5NTczNTYxNn0.lXyQCIz5CmC6KLjHGWwEioRAMoHG45QybSKFgPFAJQg';
 
 const supabase = window.supabase.createClient(
   SUPABASE_URL,
   SUPABASE_ANON_KEY
+);
 
-
-  async function testSupabase() {
+async function testSupabase() {
   const { data, error } = await supabase
     .from('users')
     .select('*');
