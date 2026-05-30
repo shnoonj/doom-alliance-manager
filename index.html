@@ -627,13 +627,13 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
   const SUPABASE_URL = 'https://ddigckjuzrvpgebvfnti.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkaWdja2p1enJ2cGdlYnZmbnRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTk2MTYsImV4cCI6MjA5NTczNTYxNn0.lXyQCIz5CmC6KLjHGWwEioRAMoHG45QybSKFgPFAJQg';
 
-const supabase = window.supabase.createClient(
+const supabaseClient = window.supabase.createClient(
   SUPABASE_URL,
   SUPABASE_ANON_KEY
 );
 
 async function testSupabase() {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from('users')
     .select('*');
 
