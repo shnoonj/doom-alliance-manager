@@ -2293,7 +2293,7 @@ function selectEventType(type){
   document.getElementById('nev-single-times').style.display=type==='single'?'block':'none';
   document.getElementById('nev-multi-times').style.display=type==='multi'?'block':'none';
 }
-function confirmCreateEvent(){
+async function confirmCreateEvent(){
   const name=document.getElementById('nev-name').value.trim();
   const errEl=document.getElementById('nev-err');
   if(!name){errEl.textContent=t('err_ev_name');errEl.style.display='block';return;}
@@ -2354,7 +2354,7 @@ function openEditEventModal(id){
   document.getElementById('modal-edit-event').classList.add('active');
 }
 
-function confirmEditEvent(){
+async function confirmEditEvent(){
   const ev=getEvent(editingEventId);if(!ev)return;
   const nameFR=document.getElementById('eed-name-fr').value.trim();
   const nameEN=document.getElementById('eed-name-en').value.trim();
