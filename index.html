@@ -347,11 +347,8 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
           </div>
         </div>
         <div id="ev-notice" style="display:none"></div>
+        <button class="btn btn-gold" id="btn-reg-event" onclick="doRegisterEvent()"></button>
       </div>
-    </div>
-    <!-- Sticky register button — always visible on mobile -->
-    <div style="position:sticky;bottom:calc(64px + var(--safe-bottom));padding:0 16px 12px;background:linear-gradient(transparent,var(--bg0) 40%);z-index:10">
-      <button class="btn btn-gold" id="btn-reg-event" onclick="doRegisterEvent()"></button>
     </div>
   </div>
 </div>
@@ -460,6 +457,14 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
       </div>
     </div>
     <div id="adm-panel-members" style="display:none">
+      <div style="padding:12px 16px 0">
+        <div style="position:relative;margin-bottom:12px">
+          <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;stroke:var(--text3);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="members-search" oninput="filterMembers(this.value)"
+            style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 14px 10px 36px;color:var(--text);font-family:var(--font-body);font-size:14px;outline:none"
+            id="lbl-members-search-input">
+        </div>
+      </div>
       <div style="padding:0 16px"><div id="adm-members-list"></div></div>
     </div>
     <div id="adm-panel-manage" style="display:none">
@@ -980,6 +985,7 @@ fr:{
   registrations:'⚔️ Inscriptions', members:'👥 Membres', manage_events:'⚙️ Événements',
   no_regs:'Aucun inscrit',
   no_members:'Aucun membre',
+  search_member:'🔍 Rechercher un membre…',
   joined:'Inscrit',
   give_player:'⚔️ Joueur', give_manager:'🛡️ Gestionnaire', give_admin:'👑 Admin',
   delete_player:'🗑️ Supprimer',
@@ -1111,6 +1117,7 @@ en:{
   registrations:'⚔️ Sign-ups', members:'👥 Members', manage_events:'⚙️ Events',
   no_regs:'No sign-ups yet',
   no_members:'No members',
+  search_member:'🔍 Search a member…',
   joined:'Joined',
   give_player:'⚔️ Player', give_manager:'🛡️ Manager', give_admin:'👑 Admin',
   delete_player:'🗑️ Delete',
@@ -1253,6 +1260,7 @@ function applyLang(){
   set('adm-tab-events',t('registrations'));
   set('adm-tab-members',t('members'));
   set('adm-tab-manage',t('manage_events'));
+  setAttr('members-search','placeholder',t('search_member'));
   set('btn-split',t('btn_split'));
   set('btn-reset',t('btn_reset'));
   set('btn-create-ev-open',t('btn_create_ev_open'));
@@ -1985,7 +1993,11 @@ function admTab(tab){
     document.getElementById('adm-panel-'+t2).style.display=t2===tab?'block':'none';
   });
   if(tab==='events')renderAdmEventTabs();
-  else if(tab==='members')renderAdmMembers();
+  else if(tab==='members'){
+    const s=document.getElementById('members-search');
+    if(s)s.value='';
+    renderAdmMembers();
+  }
   else if(tab==='manage')renderAdmManage();
 }
 function renderAdmEventTabs(){
@@ -2133,22 +2145,68 @@ function renderAdmMembers(){
   const rcM={admin:'gold',manager:'blue',player:'gray'};
   const rlM={admin:t('role_admin'),manager:t('role_manager'),player:t('role_player')};
   if(!users.length){el.innerHTML=`<div class="empty"><p>${t('no_members')}</p></div>`;return;}
-  el.innerHTML=users.map(u=>`<div class="member-row">
+  el.innerHTML=users.map(u=>`
+  <div class="member-row" id="mrow-${u.id}">
     <div class="member-top">
       <div class="player-avatar">${flagHTML(u.flag,18)}</div>
       <div class="player-info">
         <div class="player-name">${escHtml(u.pseudo)} ${unitIconHTML(u.unit,14)}</div>
         <div class="player-meta">⚡${u.power}M • ${t('joined')} ${fmtDate(u.created_at||u.createdAt)}</div>
       </div>
-      <span class="badge badge-${rcM[u.role]||'gray'}">${rlM[u.role]||u.role}</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="badge badge-${rcM[u.role]||'gray'}">${rlM[u.role]||u.role}</span>
+        ${CU.role==='admin'&&u.id!==CU.id
+          ?`<button onclick="toggleMemberEdit('${u.id}')" style="width:28px;height:28px;border-radius:6px;border:1px solid var(--border2);background:var(--bg4);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="Modifier">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>`
+          :''}
+      </div>
     </div>
-    ${CU.role==='admin'&&u.id!==CU.id?`<div class="member-actions">
-      <button class="btn btn-ghost btn-sm" onclick="setRole('${u.id}','player')">${t('give_player')}</button>
-      <button class="btn btn-ghost btn-sm" onclick="setRole('${u.id}','manager')">${t('give_manager')}</button>
-      <button class="btn btn-ghost btn-sm" style="border-color:var(--gold);color:var(--gold)" onclick="setRole('${u.id}','admin')">${t('give_admin')}</button>
-      <button class="btn btn-danger btn-sm" onclick="askDeleteMember('${u.id}')">${t('delete_player')}</button>
+    ${CU.role==='admin'&&u.id!==CU.id?`
+    <div id="medit-${u.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;font-family:var(--font-head);font-weight:600">${t('role_label')||'Rôle'}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm${u.role==='player'?' active-role':''}" onclick="setRole('${u.id}','player')" style="${u.role==='player'?'border-color:var(--text2);color:var(--text)':''}">${t('give_player')}</button>
+        <button class="btn btn-ghost btn-sm${u.role==='manager'?' active-role':''}" onclick="setRole('${u.id}','manager')" style="${u.role==='manager'?'border-color:var(--blue);color:var(--blue)':''}">${t('give_manager')}</button>
+        <button class="btn btn-ghost btn-sm${u.role==='admin'?' active-role':''}" onclick="setRole('${u.id}','admin')" style="${u.role==='admin'?'border-color:var(--gold);color:var(--gold)':''}">${t('give_admin')}</button>
+        <button class="btn btn-danger btn-sm" onclick="askDeleteMember('${u.id}')">${t('delete_player')}</button>
+      </div>
     </div>`:''}
   </div>`).join('');
+}
+function toggleMemberEdit(uid){
+  const el=document.getElementById('medit-'+uid);
+  if(!el)return;
+  const isOpen=el.style.display!=='none';
+  // Close all others first
+  document.querySelectorAll('[id^="medit-"]').forEach(x=>{x.style.display='none';});
+  el.style.display=isOpen?'none':'block';
+}
+function filterMembers(query){
+  const q=(query||'').trim().toLowerCase();
+  const rows=document.querySelectorAll('#adm-members-list [id^="mrow-"]');
+  let visible=0;
+  rows.forEach(row=>{
+    const nameEl=row.querySelector('.player-name');
+    const text=nameEl?nameEl.textContent.toLowerCase():'';
+    const show=!q||text.includes(q);
+    row.style.display=show?'':'none';
+    if(show)visible++;
+  });
+  let emptyEl=document.getElementById('members-search-empty');
+  if(!visible&&q){
+    if(!emptyEl){
+      emptyEl=document.createElement('div');
+      emptyEl.id='members-search-empty';
+      emptyEl.className='empty';
+      emptyEl.style.paddingTop='24px';
+      emptyEl.innerHTML=`<div class="empty-icon">🔍</div><p>${lang==='fr'?'Aucun membre trouvé':'No member found'}</p>`;
+      document.getElementById('adm-members-list').appendChild(emptyEl);
+    }
+    emptyEl.style.display='block';
+  }else if(emptyEl){
+    emptyEl.style.display='none';
+  }
 }
 async function setRole(uid,role){
   const u=getUsers().find(x=>x.id===uid);if(!u)return;
