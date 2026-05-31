@@ -24,12 +24,6 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:var(--bg0)}
 body.auth-open{overflow-y:auto}
-/* Desktop max-width centering */
-#app-wrapper{height:100%;display:flex;justify-content:center;background:var(--bg0)}
-#app-wrapper::before,#app-wrapper::after{content:"";flex:1;background:var(--bg0)}
-#screen-app{max-width:560px;width:100%;box-shadow:0 0 40px rgba(0,0,0,0.6)}
-.bottomnav{max-width:560px;left:50%;transform:translateX(-50%);width:100%}
-.modal-overlay{padding:0 max(0px,calc((100vw - 560px)/2))}
 body{font-family:var(--font-body);color:var(--text);font-size:15px;line-height:1.5}
 .page{display:none;flex-direction:column;height:100%;overflow:hidden}
 .page.active{display:flex}
@@ -275,7 +269,7 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
 </div>
 
 <!-- ═══════════════ APP SCREEN ═══════════════ -->
-<div id="app-wrapper"><div id="screen-app" style="display:none;height:100vh;flex-direction:column">
+<div id="screen-app" style="display:none;height:100vh;flex-direction:column">
 
 <!-- HOME -->
 <div id="page-home" class="page">
@@ -481,7 +475,7 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
   </div>
 </div>
 
-</div></div><!-- end screen-app / app-wrapper -->
+</div><!-- end screen-app -->
 
 <!-- BOTTOM NAV -->
 <div class="bottomnav hidden" id="bottomnav">
