@@ -676,9 +676,18 @@ async function loadHistory(){
 function getHistory(){ return CACHE.history; }
 async function saveHistory(h){
   if(!h.id)h.id=crypto.randomUUID();
+  // Only send columns that exist in Supabase — strip JS-only aliases
+  const row={
+    id:       h.id,
+    user_id:  h.user_id,
+    event_id: h.event_id,
+    team:     h.team||'',
+    status:   h.status,
+    date:     h.date||new Date().toISOString()
+  };
   CACHE.history=CACHE.history.filter(x=>x.id!==h.id);
-  CACHE.history.push(h);
-  const {error}=await sb.from('history').upsert(h);
+  CACHE.history.push(row);
+  const {error}=await sb.from('history').upsert(row);
   if(error)console.error('saveHistory',error);
 }
 async function deleteHistory(id){
@@ -1155,6 +1164,7 @@ en:{
 // Single lookup — always use this
 function t(k){ return (I18N[lang]||I18N.fr)[k]||k; }
 
+
 function set(id,txt){const el=document.getElementById(id);if(el)el.textContent=txt;}
 function setAttr(id,attr,val){const el=document.getElementById(id);if(el)el.setAttribute(attr,val);}
 
@@ -1593,15 +1603,8 @@ function renderHomeEventStatus(){
 
 function renderHomeCounters(){
   const evs = getEvents();
-  const regs = ALL_REGS;
-  const normalizedRegs = regs.map(r=>({
-  ...r,
-  userId:r.user_id,
-  event:r.event_id,
-  registeredAt:r.created_at
-}));
   document.getElementById('home-event-counters').innerHTML=evs.map(ev=>{
-    const evRegs=normalizedRegs.filter(r=>r.event_id===ev.id);
+    const evRegs=ALL_REGS.filter(r=>r.event_id===ev.id);
     let inner='';
     if(ev.type==='single'){
       inner=counterGrid(evRegs,ev);
@@ -1643,19 +1646,19 @@ function renderEventsPage(){
     <h3 style="color:${ev.colorText}">${evName(ev)}</h3>
     <p>${ev.type==='single'?teamTimeLabel(ev,''):t('times_by_team')}</p>
   </div>`).join('');
-  const myRegs=ALL_REGS.filter(r=>r.user_id===CU.id).map(r=>({...r,userId:r.user_id,event:r.event_id,registeredAt:r.created_at}));
+  const myRegs=ALL_REGS.filter(r=>r.user_id===CU.id);
   const sm={pending:t('st_pending'),selected:t('st_selected'),reserve:t('st_reserve'),miss:t('st_miss'),absent:t('st_absent')};
   const bm={pending:'badge-gray',selected:'badge-green',reserve:'badge-orange',miss:'badge-gray',absent:'badge-red'};
   const elMyRegs=document.getElementById('ev-my-regs');
   if(myRegs.length>0){
     elMyRegs.innerHTML='<div class="card"><div class="card-title">'+t('my_regs')+'</div>'+
       myRegs.map(r=>{
-        const ev=getEvent(r.event);
-        const label=ev?ev.emoji+' '+evName(ev):'?';
-        const teamLabel=ev&&ev.type==='multi'?` · Team ${r.team}`:'';
+        const evR=getEvent(r.event_id);
+        const label=evR?evR.emoji+' '+evName(evR):'?';
+        const teamLabel=evR&&evR.type==='multi'?` · Team ${r.team}`:'';
         return `<div class="reg-row"><div class="reg-info">
           <div class="reg-name">${label}${teamLabel}</div>
-          <div class="reg-time">${t('registered_on')} ${fmtDate(r.registeredAt)}</div></div>
+          <div class="reg-time">${t('registered_on')} ${fmtDate(r.created_at)}</div></div>
           <span class="badge ${bm[r.status]||'badge-gray'}">${sm[r.status]||r.status}</span>
           <button onclick="cancelReg('${r.id}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:0 4px">✕</button>
         </div>`;
@@ -1663,12 +1666,12 @@ function renderEventsPage(){
   }else elMyRegs.innerHTML='';
   // History warnings — show only when the player's current reg for that event/team is still pending
   const warns=[];
-  const myRegsIds=new Set(myRegs.map(r=>r.event+'_'+(r.team||'')));
-  getHistory().filter(h=>h.user_id===CU.id||h.userId===CU.id).forEach(h=>{
+  const myRegsIds=new Set(myRegs.map(r=>r.event_id+'_'+(r.team||'')));
+  getHistory().filter(h=>h.user_id===CU.id).forEach(h=>{
     if(!['absent','miss'].includes(h.status))return;
-    const evId=h.event_id||h.event;const ev=getEvent(evId);const evN=ev?evName(ev):evId;
+    const ev=getEvent(h.event_id);const evN=ev?evName(ev):h.event_id;
     // Find if player has a current pending reg for this event+team
-    const hEvId=h.event_id||h.event;const currentReg=myRegs.find(r=>(r.event_id===hEvId||r.event===hEvId)&&(
+    const hEvId=h.event_id;const currentReg=myRegs.find(r=>r.event_id===hEvId&&(
       ev?.type==='single'||r.team===h.team||r.team==='AB'||h.team===''
     ));
     // Show warning if no current reg yet, or current reg is still pending
@@ -1742,74 +1745,48 @@ async function doRegisterEvent(){
     return;
   }
 
-  if(ev.type === 'single'){
+  // Build the base registration object — always include player info
+  const regBase = {
+    user_id:  CU.id,
+    event_id: ev.id,
+    pseudo:   CU.pseudo,
+    power:    CU.power,
+    unit:     CU.unit,
+    flag:     CU.flag,
+    status:   'pending'
+  };
 
+  if(ev.type === 'single'){
+    // Check not already registered
     if(existing && existing.length){
       showToast(t('already_reg'),'error');
       return;
     }
-
-    const { error } = await supabaseClient
-      .from('registrations')
-      .insert({
-        user_id: CU.id,
-        event_id: ev.id,
-        team: ''
-      });
-
-    if(error){
-      console.error(error);
-      showToast(error.message,'error');
-      return;
-    }
-
-    showToast(
-      t('toast_registered')+' — '+ev.name,
-      'success'
-    );
+    const{error}=await sb.from('registrations').insert({...regBase, team:''});
+    if(error){console.error(error);showToast(error.message,'error');return;}
+    showToast(t('toast_registered')+' — '+evName(ev),'success');
 
   }else{
-
     if(!desertTeams.A && !desertTeams.B){
       showToast(t('no_team'),'error');
       return;
     }
+    const team = desertTeams.A && desertTeams.B ? 'AB' : desertTeams.A ? 'A' : 'B';
 
-    let team = '';
-
-    if(desertTeams.A && desertTeams.B){
-      team = 'AB';
-    }else if(desertTeams.A){
-      team = 'A';
-    }else{
-      team = 'B';
+    // Check not already registered for this team
+    if(existing && existing.length){
+      const conflict = existing.find(x=>
+        x.team===team || x.team==='AB' ||
+        (team==='AB'&&(x.team==='A'||x.team==='B'))
+      );
+      if(conflict){
+        showToast(t('already_reg'),'error');
+        return;
+      }
     }
-
-    const { error } = await supabaseClient
-      .from('registrations')
-      .insert({
-  user_id: CU.id,
-  event_id: ev.id,
-  team: team,
-
-  pseudo: CU.pseudo,
-  power: CU.power,
-  unit: CU.unit,
-  flag: CU.flag,
-
-  status: 'pending'
-});
-
-    if(error){
-      console.error(error);
-      showToast(error.message,'error');
-      return;
-    }
-
-    showToast(
-      t('toast_registered')+' — '+ev.name,
-      'success'
-    );
+    const{error}=await sb.from('registrations').insert({...regBase, team});
+    if(error){console.error(error);showToast(error.message,'error');return;}
+    showToast(t('toast_registered')+' — '+evName(ev)+' Team '+team,'success');
   }
 
   selEventId = null;
@@ -1873,15 +1850,17 @@ function listSelectTeam(tm){listTeam=tm;renderListTeamTabs();renderList();}
 function renderList(){
   const ev=getEvent(listEventId);
   if(!ev){document.getElementById('list-content').innerHTML='';return;}
-let regs =
-  ev.type === 'single'
-    ? ALL_REGS.filter(r => r.event_id === listEventId)
-    : ALL_REGS.filter(
-        r =>
-          r.event_id === listEventId &&
-          (r.team === listTeam || r.team === 'AB')
-      );
-  const sorted=[...regs].map(r=>({...r,pseudo:r.pseudo||'?',power:r.power||0,flag:r.flag||DEFAULT_AVATAR,unit:r.unit||'',userId:r.user_id||r.userId,event:r.event_id||r.event,registeredAt:r.created_at||r.registeredAt})).sort((a,b)=>new Date(a.registeredAt)-new Date(b.registeredAt));
+  const regs = ev.type==='single'
+    ? ALL_REGS.filter(r=>r.event_id===listEventId)
+    : ALL_REGS.filter(r=>r.event_id===listEventId&&(r.team===listTeam||r.team==='AB'));
+  const sorted=[...regs].map(r=>({
+    ...r,
+    pseudo:      r.pseudo||'?',
+    power:       r.power||0,
+    flag:        r.flag||DEFAULT_AVATAR,
+    unit:        r.unit||'',
+    registeredAt:r.created_at
+  })).sort((a,b)=>new Date(a.registeredAt)-new Date(b.registeredAt));
   const total=sorted.length,sel=sorted.filter(r=>r.status==='selected').length,res=sorted.filter(r=>r.status==='reserve').length,pend=sorted.filter(r=>r.status==='pending').length;
   document.getElementById('list-stats').innerHTML=`
     <div class="stat-box"><div class="num">${total}</div><div class="lbl">${t('total')}</div></div>
@@ -1897,10 +1876,9 @@ let regs =
   const bg={pending:'badge-gray',selected:'badge-green',reserve:'badge-orange',miss:'badge-gray',absent:'badge-red'};
   document.getElementById('list-content').innerHTML=sorted.map((r,i)=>{
     const lookupTeams=r.team==='AB'?[listTeam]:r.team?[r.team]:[''];
-    const rUid=r.user_id||r.userId;
     const h=ev.type==='multi'
-      ?hist.find(x=>(x.user_id||x.userId)===rUid&&(x.event_id||x.event)===listEventId&&lookupTeams.includes(x.team))
-      :hist.find(x=>(x.user_id||x.userId)===rUid&&(x.event_id||x.event)===listEventId);
+      ?hist.find(x=>x.user_id===r.user_id&&x.event_id===listEventId&&lookupTeams.includes(x.team))
+      :hist.find(x=>x.user_id===r.user_id&&x.event_id===listEventId);
     let hb='';
     if(h&&r.status==='pending'){
       if(h.status==='absent')hb=`<span title="${t('absent_prev')}">🔴</span>`;
@@ -1942,11 +1920,11 @@ function renderProfile(){
   renderProfileHistory();
 }
 function renderProfileHistory(){
-  const hist=getHistory().filter(h=>(h.user_id||h.userId)===CU.id);
+  const hist=getHistory().filter(h=>h.user_id===CU.id);
   const regs=ALL_REGS.filter(r=>r.user_id===CU.id);
   const el=document.getElementById('prof-history');
   if(!hist.length&&!regs.length){el.innerHTML=`<div style="color:var(--text3);font-size:14px">${t('no_history')}</div>`;return;}
-  const all=[...hist.map(h=>({...h,event:h.event_id||h.event,cur:false})),...regs.map(r=>({userId:r.user_id,event:r.event_id,team:r.team,status:r.status,date:r.created_at,cur:true}))];
+  const all=[...hist.map(h=>({...h,event:h.event_id,cur:false})),...regs.map(r=>({event:r.event_id,team:r.team,status:r.status,date:r.created_at,cur:true}))];
   const sl={pending:t('st_pending'),selected:t('st_selected'),reserve:t('st_reserve'),miss:t('st_miss'),absent:t('st_absent')};
   const bg={pending:'badge-gray',selected:'badge-green',reserve:'badge-orange',miss:'badge-gray',absent:'badge-red'};
   el.innerHTML=all.map(h=>{
@@ -2005,15 +1983,15 @@ function renderAdmEventTabs(){
   tabEl.innerHTML=evs.map(ev=>`<div class="tab${ev.id===admEvent?' active':''}" onclick="admSelectEvent('${ev.id}')">${ev.emoji} ${evName(ev)}</div>`).join('');
   const ev=getEvent(admEvent);
   const teamEl=document.getElementById('adm-team-tabs');
-  const sb=document.getElementById('btn-split');
+  const btnSplit=document.getElementById('btn-split');
   if(!ev||ev.type==='single'){
     teamEl.style.display='none';
-    if(sb)sb.style.display='flex';
+    if(btnSplit)btnSplit.style.display='flex';
   }else{
     teamEl.style.display='flex';
     teamEl.innerHTML=`<div class="tab${admTeam==='A'?' active':''}" onclick="admSelectTeam('A')">⚔️ Team A</div>
       <div class="tab${admTeam==='B'?' active':''}" onclick="admSelectTeam('B')">⚔️ Team B</div>`;
-    if(sb)sb.style.display='none';
+    if(btnSplit)btnSplit.style.display='none';
   }
   renderAdmList();
 }
@@ -2026,15 +2004,15 @@ function admSelectTeam(tm){
 function renderAdmList(){
   const ev=getEvent(admEvent);
   if(!ev){document.getElementById('adm-list').innerHTML='';return;}
- let regs =
-  ev.type === 'single'
-    ? ALL_REGS.filter(r => r.event_id === listEventId)
-    : ALL_REGS.filter(
-        r =>
-          r.event_id === listEventId &&
-          (r.team === listTeam || r.team === 'AB')
-      );
-  const sorted=[...regs].map(r=>({...r,pseudo:r.pseudo||'?',power:r.power||0,flag:r.flag||DEFAULT_AVATAR,unit:r.unit||'',userId:r.user_id||r.userId,event:r.event_id||r.event,registeredAt:r.created_at||r.registeredAt})).sort((a,b)=>new Date(a.registeredAt)-new Date(b.registeredAt));
+  const regs = ev.type==='single'
+    ? ALL_REGS.filter(r=>r.event_id===admEvent)
+    : ALL_REGS.filter(r=>r.event_id===admEvent&&(r.team===admTeam||r.team==='AB'));
+  const sorted=[...regs].map(r=>({
+    ...r,
+    pseudo:r.pseudo||'?',power:r.power||0,
+    flag:r.flag||DEFAULT_AVATAR,unit:r.unit||'',
+    registeredAt:r.created_at
+  })).sort((a,b)=>new Date(a.registeredAt)-new Date(b.registeredAt));
   const hist=getHistory();
   const total=sorted.length,sel=sorted.filter(r=>r.status==='selected').length,res=sorted.filter(r=>r.status==='reserve').length,abs=sorted.filter(r=>r.status==='absent').length;
   document.getElementById('adm-stats').innerHTML=`
@@ -2051,11 +2029,9 @@ function renderAdmList(){
     // A player registered AB has entries saved as 'A' and 'B' individually.
     // We look for the relevant team entry.
     const lookupTeams=r.team==='AB'?[admTeam]:r.team?[r.team]:[''];
-    const rUid2=r.user_id||r.userId;
-    const rEid=r.event_id||r.event;
     const h=hist.find(x=>
-      (x.user_id||x.userId)===rUid2 &&
-      (x.event_id||x.event)===rEid &&
+      x.user_id===r.user_id &&
+      x.event_id===admEvent &&
       (ev.type==='single' || lookupTeams.includes(x.team))
     );
     // Only show badge if history status differs from current status
@@ -2102,25 +2078,30 @@ async function setRegStatus(rid,status){
   const{error}=await sb.from('registrations').update({status:newStatus}).eq('id',rid);
   if(error){console.error(error);showToast(error.message,'error');return;}
 
-  // Save history entry for miss/absent/selected
+  // Manage history entry
+  const uid=r.user_id;
+  const eid=r.event_id;
+  const ev=getEvent(eid);
+  // For AB registrations, save one history entry per team
+  const teams=r.team==='AB'?['A','B']:(r.team?[r.team]:['']);
+
+  // Always remove existing history entries for this user/event/teams first
+  const toDelete=getHistory().filter(h=>
+    h.user_id===uid &&
+    h.event_id===eid &&
+    (ev?.type==='single'||teams.includes(h.team))
+  );
+  for(const h of toDelete)await deleteHistory(h.id);
+
+  // Save new history entry only for meaningful statuses (not pending)
   if(['miss','absent','selected','reserve'].includes(newStatus)){
-    // Remove previous entry for same user/event/team
-    const uid=r.user_id||r.userId;
-    const eid=r.event_id||r.event;
-    const ev=getEvent(eid);
-    const teams=r.team==='AB'?['A','B']:(r.team?[r.team]:['']);
-    const toDelete=getHistory().filter(h=>
-      (h.user_id||h.userId)===uid &&
-      (h.event_id||h.event)===eid &&
-      (ev?.type==='single'||teams.includes(h.team))
-    );
-    for(const h of toDelete)await deleteHistory(h.id);
     for(const team of teams){
       await saveHistory({
-        user_id:uid, userId:uid,
-        event_id:eid, event:eid,
-        team:team||'', status:newStatus,
-        date:new Date().toISOString()
+        user_id: uid,
+        event_id: eid,
+        team:     team||'',
+        status:   newStatus,
+        date:     new Date().toISOString()
       });
     }
   }
@@ -2171,49 +2152,17 @@ function askDeleteMember(uid){
   document.getElementById('modal-delete-member').classList.add('active');
 }
 async function confirmDeleteMember(){
-
-  if(!pendingDeleteId) return;
-
-  const uid = pendingDeleteId;
-
-  // Supprimer toutes ses inscriptions
-  const { error: regError } = await supabaseClient
-    .from('registrations')
-    .delete()
-    .eq('user_id', uid);
-
-  if(regError){
-    console.error(regError);
-    showToast(regError.message,'error');
-    return;
-  }
-
-  // Supprimer l'utilisateur
-  const { error: userError } = await supabaseClient
-    .from('users')
-    .delete()
-    .eq('id', uid);
-
-  if(userError){
-    console.error(userError);
-    showToast(userError.message,'error');
-    return;
-  }
-
-  await loadRegistrations();
-
+  if(!pendingDeleteId)return;
+  const uid=pendingDeleteId;
+  await sb.from('registrations').delete().eq('user_id',uid);
+  await sb.from('history').delete().eq('user_id',uid);
+  const{error}=await sb.from('users').delete().eq('id',uid);
+  if(error){showToast(error.message,'error');return;}
+  await Promise.all([loadUsers(),loadRegistrations(),loadHistory()]);
   closeModal('delete-member');
-
-  pendingDeleteId = null;
-
-  showToast(
-    t('toast_deleted'),
-    'info'
-  );
-
-  renderAdmMembers();
-  renderAdmList();
-  renderHome();
+  pendingDeleteId=null;
+  showToast(t('toast_deleted'),'info');
+  renderAdmMembers();renderAdmList();renderHome();
 }
 
 // ═══════════════════════════════════════════════════════════════
