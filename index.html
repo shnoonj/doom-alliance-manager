@@ -307,7 +307,7 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
     <div><div class="topbar-title" id="ev-topbar-title"></div><div class="topbar-sub" id="ev-topbar-sub"></div></div>
     <div class="topbar-avatar" id="ev-avatar" onclick="navTo('profile')">?</div>
   </div>
-  <div class="page-scroll">
+  <div class="page-scroll" style="padding-bottom:calc(100px + var(--safe-bottom))">
     <div style="padding:16px">
       <div id="ev-my-regs"></div>
       <div class="card">
@@ -346,8 +346,11 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
           </div>
         </div>
         <div id="ev-notice" style="display:none"></div>
-        <button class="btn btn-gold" id="btn-reg-event" onclick="doRegisterEvent()"></button>
       </div>
+    </div>
+    <!-- Sticky register button — always visible on mobile -->
+    <div style="position:sticky;bottom:calc(64px + var(--safe-bottom));padding:0 16px 12px;background:linear-gradient(transparent,var(--bg0) 40%);z-index:10">
+      <button class="btn btn-gold" id="btn-reg-event" onclick="doRegisterEvent()"></button>
     </div>
   </div>
 </div>
@@ -702,7 +705,13 @@ async function loadEvents(){
   return getEvents();
 }
 function getEvents(){
-  return(CACHE.events&&CACHE.events.length)?CACHE.events:DEFAULT_EVENTS();
+  // Always include the two system events + any custom events saved in Supabase
+  const defaults=DEFAULT_EVENTS();
+  if(!CACHE.events||!CACHE.events.length) return defaults;
+  // Merge: keep defaults first, then add custom events (those not in defaults)
+  const defaultIds=new Set(defaults.map(e=>e.id));
+  const custom=CACHE.events.filter(e=>!defaultIds.has(e.id));
+  return [...defaults,...custom];
 }
 async function saveEvent(e){
   CACHE.events=getEvents().filter(x=>x.id!==e.id);
