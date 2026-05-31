@@ -23,6 +23,7 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:var(--bg0)}
+body.auth-open{overflow-y:auto}
 body{font-family:var(--font-body);color:var(--text);font-size:15px;line-height:1.5}
 .page{display:none;flex-direction:column;height:100%;overflow:hidden}
 .page.active{display:flex}
@@ -92,7 +93,7 @@ body{font-family:var(--font-body);color:var(--text);font-size:15px;line-height:1
 .stat-box{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 4px;text-align:center}
 .stat-box .num{font-family:var(--font-head);font-size:20px;font-weight:700}
 .stat-box .lbl{font-size:9px;color:var(--text3);letter-spacing:0.5px;text-transform:uppercase;margin-top:1px}
-.auth-bg{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:var(--bg0)}
+.auth-bg{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:40px 24px 40px;background:var(--bg0)}
 .auth-logo{text-align:center;margin-bottom:32px}
 .auth-logo .logo-icon{font-size:52px;margin-bottom:8px}
 .auth-logo h1{font-family:var(--font-head);font-size:28px;font-weight:700;letter-spacing:2px;color:var(--gold)}
@@ -1478,6 +1479,7 @@ function doLogout(){
   document.getElementById('screen-app').style.display='none';
   document.getElementById('screen-auth').style.display='flex';
   document.getElementById('bottomnav').classList.add('hidden');
+  document.body.classList.add('auth-open');
   authTab('login');
   applyLang();
 }
@@ -1504,6 +1506,7 @@ async function initApp(){
   loadEl.remove();
 
   document.getElementById('screen-auth').style.display='none';
+  document.body.classList.remove('auth-open');
   const app=document.getElementById('screen-app');
   app.style.display='flex';app.style.flexDirection='column';app.style.height='100vh';
   document.getElementById('bottomnav').classList.remove('hidden');
@@ -2467,6 +2470,7 @@ function showToast(msg,type='info'){
 //  STARTUP — wait for DOM before running anything
 // ═══════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function(){
+  document.body.classList.add('auth-open');
   applyLang();
   buildFlagPicker('reg-flags','reg');
 });
