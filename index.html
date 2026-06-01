@@ -304,7 +304,10 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
         </div>
       </div>
       <div class="card">
-        <div class="card-title" id="home-events-title"></div>
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
+          <span id="home-events-title"></span>
+          <button onclick="navTo('events')" id="home-reg-btn" class="btn btn-gold btn-sm" style="width:auto;font-size:13px;padding:7px 14px;letter-spacing:0.5px"></button>
+        </div>
         <div id="home-events-status"></div>
       </div>
       <div id="home-event-counters"></div>
@@ -1235,6 +1238,7 @@ function applyLang(){
   // ── HOME ──
   set('home-topbar-sub',t('alliance_sub'));
   set('home-events-title',t('week_events'));
+  set('home-reg-btn',t('register_short'));
 
   // ── EVENTS PAGE ──
   set('ev-topbar-title',t('events_title'));
