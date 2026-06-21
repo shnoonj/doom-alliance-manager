@@ -1804,22 +1804,29 @@ async function doRegisterEvent(){
       showToast(t('no_team'),'error');
       return;
     }
-    const team = desertTeams.A && desertTeams.B ? 'AB' : desertTeams.A ? 'A' : 'B';
+    const wantsA = desertTeams.A;
+    const wantsB = desertTeams.B;
 
-    // Check not already registered for this team
+    // Check not already registered for the requested team(s)
     if(existing && existing.length){
-      const conflict = existing.find(x=>
-        x.team===team || x.team==='AB' ||
-        (team==='AB'&&(x.team==='A'||x.team==='B'))
-      );
-      if(conflict){
-        showToast(t('already_reg'),'error');
-        return;
-      }
+      const conflictA = wantsA && existing.find(x=>x.team==='A');
+      const conflictB = wantsB && existing.find(x=>x.team==='B');
+      if(conflictA && conflictB){ showToast(t('already_reg'),'error'); return; }
+      if(conflictA){ showToast(t('already_reg_a'),'error'); return; }
+      if(conflictB){ showToast(t('already_reg_b'),'error'); return; }
     }
-    const{error}=await sb.from('registrations').insert({...regBase, team});
+
+    // Insert ONE separate row per team — never 'AB'.
+    // This keeps each team's status (selected/reserve/miss/absent) fully independent.
+    const rowsToInsert=[];
+    if(wantsA) rowsToInsert.push({...regBase, team:'A'});
+    if(wantsB) rowsToInsert.push({...regBase, team:'B'});
+
+    const{error}=await sb.from('registrations').insert(rowsToInsert);
     if(error){console.error(error);showToast(error.message,'error');return;}
-    showToast(t('toast_registered')+' — '+evName(ev)+' Team '+team,'success');
+
+    const teamLabel = wantsA && wantsB ? 'A+B' : wantsA ? 'A' : 'B';
+    showToast(t('toast_registered')+' — '+evName(ev)+' Team '+teamLabel,'success');
   }
 
   selEventId = null;
@@ -1917,7 +1924,11 @@ function renderList(){
       if(h.status==='absent')hb=`<span title="${t('absent_prev')}">🔴</span>`;
       else if(h.status==='miss')hb=`<span title="${t('miss_prev')}">⚠️</span>`;
     }
-    const abTag=ev.type==='multi'&&r.team==='AB'?'<span class="ab-badge">A+B</span>':'';
+    const isAB1 = r.team==='AB' || (ev.type==='multi' && ALL_REGS.some(x=>
+      x.user_id===r.user_id && x.event_id===listEventId &&
+      x.team===(r.team==='A'?'B':'A')
+    ));
+    const abTag=ev.type==='multi'&&isAB1?'<span class="ab-badge">A+B</span>':'';
     return `<div class="reg-row">
       <div class="reg-info">
         <div class="reg-name">#${i+1} ${flagHTML(r.flag,14)} ${escHtml(r.pseudo)} ${unitIconHTML(r.unit,14)} ${abTag} ${hb}</div>
@@ -2063,8 +2074,7 @@ function renderAdmList(){
   }
   document.getElementById('adm-list').innerHTML=sorted.map((r,i)=>{
     // Find history entry for this player on this event/team.
-    // A player registered AB has entries saved as 'A' and 'B' individually.
-    // We look for the relevant team entry.
+    // Legacy AB rows (if any remain from before the fix) fall back to admTeam.
     const lookupTeams=r.team==='AB'?[admTeam]:r.team?[r.team]:[''];
     const h=hist.find(x=>
       x.user_id===r.user_id &&
@@ -2083,7 +2093,11 @@ function renderAdmList(){
       if(h.status==='absent')hb=`<span title="${t('absent_prev')}" style="font-size:14px">🔴</span>`;
       else if(h.status==='miss')hb=`<span title="${t('miss_prev')}" style="font-size:14px">⚠️</span>`;
     }
-    const abTag=ev.type==='multi'&&r.team==='AB'?'<span class="ab-badge">A+B</span>':'';
+    const isAB2 = r.team==='AB' || (ev.type==='multi' && ALL_REGS.some(x=>
+      x.user_id===r.user_id && x.event_id===admEvent &&
+      x.team===(r.team==='A'?'B':'A')
+    ));
+    const abTag=ev.type==='multi'&&isAB2?'<span class="ab-badge">A+B</span>':'';
     const rowClass={pending:'',selected:' status-selected',reserve:' status-reserve',absent:' status-absent',miss:' status-miss'}[r.status]||'';
     return `<div class="player-row${rowClass}">
       <div class="player-avatar">${flagHTML(r.flag,18)}</div>
