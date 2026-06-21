@@ -974,6 +974,7 @@ fr:{
   list_title:'INSCRITS', list_sub:'Listes des équipes',
   /* statuses (short — badges, tabs) */
   st_pending:'En attente', st_selected:'✅ Sélect.', st_reserve:'⧖ Rempl.',
+  st_registered:'Inscrit',
   st_miss:'⚠️ Non sélect.', st_absent:'🔴 Absent',
   /* statuses (long — tooltips) */
   tt_select:'Sélectionner', tt_reserve:'Remplaçant',
@@ -1106,6 +1107,7 @@ en:{
   list_title:'ROSTER', list_sub:'Team lists',
   /* statuses */
   st_pending:'Pending', st_selected:'✅ Selected', st_reserve:'⧖ Reserve',
+  st_registered:'Registered',
   st_miss:'⚠️ Not selected', st_absent:'🔴 Absent',
   /* tooltips */
   tt_select:'Select', tt_reserve:'Reserve',
@@ -1601,27 +1603,23 @@ function renderHome(){
 
 function renderHomeEventStatus(){
   const evs = getEvents();
-
-  const regs = ALL_REGS.map(r=>({
-    ...r,
-    userId:r.user_id,
-    event:r.event_id
-  }));
-
-  const myRegs = regs.filter(r=>r.userId===CU.id);
-  const sm={pending:t('st_pending'),selected:t('st_selected'),reserve:t('st_reserve'),miss:t('st_miss'),absent:t('st_absent')};
+  const myRegs = ALL_REGS.filter(r=>r.user_id===CU.id);
+  const sm={pending:t('st_registered'),selected:t('st_selected'),reserve:t('st_reserve'),miss:t('st_miss'),absent:t('st_absent')};
   const bm={pending:'badge-gray',selected:'badge-green',reserve:'badge-orange',miss:'badge-gray',absent:'badge-red'};
   document.getElementById('home-events-status').innerHTML=evs.map(ev=>{
-    const myEvRegs =
-  myRegs.filter(r => r.event_id === ev.id);
+    const myEvRegs=myRegs.filter(r=>r.event_id===ev.id);
     if(myEvRegs.length>0){
       return myEvRegs.map(r=>{
         const teamLabel=ev.type==='multi'?` · Team ${r.team}`:' · '+teamTimeLabel(ev,'');
+        // Pending registrations get a badge colored with the event's theme color
+        const badgeHTML = r.status==='pending'
+          ? `<span class="badge" style="background:${ev.colorDark};color:${ev.colorText};border:1px solid ${ev.colorBorder}">${t('st_registered')}</span>`
+          : `<span class="badge ${bm[r.status]||'badge-gray'}">${sm[r.status]||r.status}</span>`;
         return `<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:var(--radius-sm);margin-bottom:8px;border:1px solid var(--border)">
           <span style="font-size:22px">${ev.emoji}</span>
           <div style="flex:1"><div style="font-family:var(--font-head);font-size:14px;font-weight:600">${evName(ev)}</div>
           <div style="font-size:12px;color:var(--text3)">${teamLabel}</div></div>
-          <span class="badge ${'badge-gray'}">${t('st_pending')}</span>
+          ${badgeHTML}
         </div>`;
       }).join('');
     }
