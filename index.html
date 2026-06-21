@@ -752,13 +752,19 @@ async function loadEvents(){
   return getEvents();
 }
 function getEvents(){
-  // Always include the two system events + any custom events saved in Supabase
+  // Always show the two system events (Canyon/Desert) + any custom events.
+  // If a system event has been saved/edited in Supabase, use that version
+  // instead of the hardcoded default — so admin edits (day, capacity, times...)
+  // actually take effect.
   const defaults=DEFAULT_EVENTS();
-  if(!CACHE.events||!CACHE.events.length) return defaults;
-  // Merge: keep defaults first, then add custom events (those not in defaults)
+  const fromDB = CACHE.events||[];
+  const merged = defaults.map(def=>{
+    const saved = fromDB.find(e=>e.id===def.id);
+    return saved ? {...def,...saved} : def;
+  });
   const defaultIds=new Set(defaults.map(e=>e.id));
-  const custom=CACHE.events.filter(e=>!defaultIds.has(e.id));
-  return [...defaults,...custom];
+  const custom = fromDB.filter(e=>!defaultIds.has(e.id));
+  return [...merged,...custom];
 }
 async function saveEvent(e){
   CACHE.events=getEvents().filter(x=>x.id!==e.id);
@@ -1664,7 +1670,7 @@ function renderHomeEventStatus(){
   const bm={pending:'badge-gray',selected:'badge-green',reserve:'badge-orange',miss:'badge-gray',absent:'badge-red'};
 
   document.getElementById('home-events-status').innerHTML=evs.map((ev,idx)=>{
-    const dayLbl=dayName(ev.dayOfWeek);
+    const dayLbl=dayName(ev.dayOfWeek!==undefined?ev.dayOfWeek:ev.dayofweek);
     const myEvRegs=myRegs.filter(r=>r.event_id===ev.id);
     const borderTop = idx>0 ? 'border-top:1px solid var(--border);padding-top:14px;margin-top:14px' : '';
 
@@ -2503,8 +2509,9 @@ function openEditEventModal(id){
     document.getElementById('eed-b-srv').value=ev.timeBSRV||'';
   }
   document.getElementById('eed-warn').style.display='none';
-  eedDaySel = (ev.dayOfWeek===undefined||ev.dayOfWeek===null) ? null : ev.dayOfWeek;
-  eedCapacitySel = ev.capacity||0;
+  const rawDay = ev.dayOfWeek !== undefined ? ev.dayOfWeek : ev.dayofweek;
+  eedDaySel = (rawDay===undefined||rawDay===null) ? null : Number(rawDay);
+  eedCapacitySel = Number(ev.capacity)||0;
   buildDayPicker('eed-day-picker','eed');
   selectEedCapacity(eedCapacitySel);
   selectEditType(eedTypeSel);
