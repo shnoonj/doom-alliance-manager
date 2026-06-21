@@ -182,6 +182,12 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
 .managed-ev-meta{font-size:11px;color:var(--text3);margin-top:2px}
 .managed-ev-locked{font-size:10px;color:var(--gold);margin-top:3px;font-weight:600}
 .team-type-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.day-picker{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.day-opt{text-align:center;padding:9px 2px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--bg3);font-size:12px;color:var(--text2);cursor:pointer;transition:all 0.15s}
+.day-opt.active{border-color:var(--gold);background:var(--gold-dim);color:var(--gold);font-weight:700}
+.capacity-toggle{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cap-opt{text-align:center;padding:10px 4px;border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--bg3);font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;transition:all 0.15s;font-family:var(--font-head)}
+.cap-opt.active{border-color:var(--gold);background:var(--gold-dim);color:var(--gold)}
 /* FLAG / EMBLEM PICKER */
 .flag-picker-btn{display:flex;align-items:center;gap:10px;font-size:15px;padding:11px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);cursor:pointer;color:var(--text);transition:border-color 0.2s}
 .flag-picker-btn:hover{border-color:var(--gold)}
@@ -310,7 +316,6 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
         </div>
         <div id="home-events-status"></div>
       </div>
-      <div id="home-event-counters"></div>
     </div>
   </div>
 </div>
@@ -597,6 +602,18 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
         <div class="field"><label id="lbl-nev-b-srv"></label><input type="text" id="nev-b-srv"></div>
       </div>
     </div>
+    <div class="field">
+      <label id="lbl-nev-day"></label>
+      <div class="day-picker" id="nev-day-picker"></div>
+    </div>
+    <div class="field">
+      <label id="lbl-nev-capacity"></label>
+      <div class="capacity-toggle" id="nev-capacity-picker">
+        <div class="cap-opt" data-cap="30" onclick="selectNevCapacity(30)">30</div>
+        <div class="cap-opt" data-cap="60" onclick="selectNevCapacity(60)">60</div>
+        <div class="cap-opt active" data-cap="0" onclick="selectNevCapacity(0)" id="lbl-nev-cap-unlimited"></div>
+      </div>
+    </div>
     <div id="nev-err" style="display:none" class="notice red"></div>
     <button class="btn btn-gold" id="btn-create-ev" onclick="confirmCreateEvent()"></button>
     <div style="height:8px"></div>
@@ -634,6 +651,18 @@ svg.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stro
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="field"><label id="lbl-eed-b-fr"></label><input type="text" id="eed-b-fr"></div>
         <div class="field"><label id="lbl-eed-b-srv"></label><input type="text" id="eed-b-srv"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label id="lbl-eed-day"></label>
+      <div class="day-picker" id="eed-day-picker"></div>
+    </div>
+    <div class="field">
+      <label id="lbl-eed-capacity"></label>
+      <div class="capacity-toggle" id="eed-capacity-picker">
+        <div class="cap-opt" data-cap="30" onclick="selectEedCapacity(30)">30</div>
+        <div class="cap-opt" data-cap="60" onclick="selectEedCapacity(60)">60</div>
+        <div class="cap-opt" data-cap="0" onclick="selectEedCapacity(0)" id="lbl-eed-cap-unlimited"></div>
       </div>
     </div>
     <div id="eed-warn" class="notice" style="display:none"></div>
@@ -794,9 +823,17 @@ function refreshCurrentPage(){
 // ═══════════════════════════════════════════════════════════════
 function DEFAULT_EVENTS(){
   return[
-    {id:'canyon',name:'Tempête du Canyon',nameEN:'Canyon Storm',emoji:'🏔️',color:'#2ea87e',colorDark:'rgba(46,168,100,0.12)',colorBorder:'rgba(46,168,100,0.3)',colorText:'#6ecf8e',type:'single',timeFR:'16h FR',timeSRV:'12h Serveur'},
-    {id:'desert',name:'Tempête du Désert',nameEN:'Desert Storm',emoji:'🏜️',color:'#c9973a',colorDark:'rgba(201,151,58,0.12)',colorBorder:'rgba(201,151,58,0.3)',colorText:'#e8b84b',type:'multi',timeAFR:'13h FR',timeASRV:'9h Serveur',timeBFR:'22h FR',timeBSRV:'18h Serveur'}
+    {id:'canyon',name:'Tempête du Canyon',nameEN:'Canyon Storm',emoji:'🏔️',color:'#2ea87e',colorDark:'rgba(46,168,100,0.12)',colorBorder:'rgba(46,168,100,0.3)',colorText:'#6ecf8e',type:'single',timeFR:'16h FR',timeSRV:'12h Serveur',dayOfWeek:4,capacity:60},
+    {id:'desert',name:'Tempête du Désert',nameEN:'Desert Storm',emoji:'🏜️',color:'#c9973a',colorDark:'rgba(201,151,58,0.12)',colorBorder:'rgba(201,151,58,0.3)',colorText:'#e8b84b',type:'multi',timeAFR:'13h FR',timeASRV:'9h Serveur',timeBFR:'22h FR',timeBSRV:'18h Serveur',dayOfWeek:6,capacity:30}
   ];
+}
+const DAY_NAMES_FR=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+const DAY_NAMES_EN=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const DAY_SHORT_FR=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+const DAY_SHORT_EN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function dayName(d){
+  if(d===null||d===undefined||d==='')return '';
+  return (lang==='en'?DAY_NAMES_EN:DAY_NAMES_FR)[d]||'';
 }
 // Returns the display name of an event in the current language
 function evName(ev){
@@ -1037,6 +1074,10 @@ fr:{
   ev_type_multi_title:'Équipe A / B',
   ev_type_multi_sub:'Deux équipes distinctes',
   ev_time_fr:'Heure FR', ev_time_srv:'Heure serveur',
+  ev_day:'Jour de la semaine',
+  ev_capacity:"Capacité max. de l'événement",
+  ev_cap_unlimited:'Illimité',
+  registered_count:'inscrits',
   btn_create:'✅ CRÉER L\'ÉVÉNEMENT',
   btn_create_ev_open:'➕ CRÉER UN ÉVÉNEMENT',
   /* edit event modal */
@@ -1170,6 +1211,10 @@ en:{
   ev_type_multi_title:'Team A / B',
   ev_type_multi_sub:'Two separate teams',
   ev_time_fr:'FR time', ev_time_srv:'Server time',
+  ev_day:'Day of the week',
+  ev_capacity:'Event max capacity',
+  ev_cap_unlimited:'Unlimited',
+  registered_count:'registered',
   btn_create:'✅ CREATE EVENT',
   btn_create_ev_open:'➕ CREATE AN EVENT',
   /* edit event modal */
@@ -1315,6 +1360,10 @@ function applyLang(){
   setAttr('nev-b-fr','placeholder',lang==='fr'?'Ex: 22h':'e.g. 10pm');
   setAttr('nev-b-srv','placeholder',lang==='fr'?'Ex: 18h':'e.g. 6pm');
   setAttr('nev-name','placeholder',lang==='fr'?'Ex: Tempête des Glaces':'e.g. Ice Storm');
+  set('lbl-nev-day',t('ev_day'));
+  set('lbl-nev-capacity',t('ev_capacity'));
+  set('lbl-nev-cap-unlimited',t('ev_cap_unlimited'));
+  buildDayPicker('nev-day-picker','nev');
   set('btn-create-ev',t('btn_create'));
   set('btn-create-ev-cancel',t('cancel'));
 
@@ -1334,6 +1383,10 @@ function applyLang(){
   set('lbl-eed-a-srv',t('ev_time_srv'));
   set('lbl-eed-b-fr',t('ev_time_fr'));
   set('lbl-eed-b-srv',t('ev_time_srv'));
+  set('lbl-eed-day',t('ev_day'));
+  set('lbl-eed-capacity',t('ev_capacity'));
+  set('lbl-eed-cap-unlimited',t('ev_cap_unlimited'));
+  buildDayPicker('eed-day-picker','eed');
   set('btn-save-event',t('btn_save_event'));
   set('btn-edit-ev-cancel',t('cancel'));
 
@@ -1598,7 +1651,6 @@ function renderHome(){
   document.getElementById('home-power-role').textContent=roleLabel+' • '+u.power+'M';
   document.getElementById('admin-topbar-sub').textContent=u.role==='admin'?t('role_admin'):t('role_manager');
   renderHomeEventStatus();
-  renderHomeCounters();
 }
 
 function renderHomeEventStatus(){
@@ -1606,63 +1658,81 @@ function renderHomeEventStatus(){
   const myRegs = ALL_REGS.filter(r=>r.user_id===CU.id);
   const sm={pending:t('st_registered'),selected:t('st_selected'),reserve:t('st_reserve'),miss:t('st_miss'),absent:t('st_absent')};
   const bm={pending:'badge-gray',selected:'badge-green',reserve:'badge-orange',miss:'badge-gray',absent:'badge-red'};
-  document.getElementById('home-events-status').innerHTML=evs.map(ev=>{
+
+  document.getElementById('home-events-status').innerHTML=evs.map((ev,idx)=>{
+    const dayLbl=dayName(ev.dayOfWeek);
     const myEvRegs=myRegs.filter(r=>r.event_id===ev.id);
-    if(myEvRegs.length>0){
-      return myEvRegs.map(r=>{
-        const teamLabel=ev.type==='multi'?` · Team ${r.team}`:' · '+teamTimeLabel(ev,'');
-        // Pending registrations get a badge colored with the event's theme color
-        const badgeHTML = r.status==='pending'
-          ? `<span class="badge" style="background:${ev.colorDark};color:${ev.colorText};border:1px solid ${ev.colorBorder}">${t('st_registered')}</span>`
-          : `<span class="badge ${bm[r.status]||'badge-gray'}">${sm[r.status]||r.status}</span>`;
-        return `<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:var(--radius-sm);margin-bottom:8px;border:1px solid var(--border)">
-          <span style="font-size:22px">${ev.emoji}</span>
-          <div style="flex:1"><div style="font-family:var(--font-head);font-size:14px;font-weight:600">${evName(ev)}</div>
-          <div style="font-size:12px;color:var(--text3)">${teamLabel}</div></div>
-          ${badgeHTML}
+    const borderTop = idx>0 ? 'border-top:1px solid var(--border);padding-top:14px;margin-top:14px' : '';
+
+    function statusBadge(){
+      const r=myEvRegs[0]; // single-team event: at most one reg
+      if(!r) return `<span style="font-size:11px;color:var(--text3)">${t('not_reg')}</span>`;
+      if(r.status==='pending')
+        return `<span class="badge" style="background:${ev.colorDark};color:${ev.colorText};border:1px solid ${ev.colorBorder}">${t('st_registered')}</span>`;
+      return `<span class="badge ${bm[r.status]||'badge-gray'}">${sm[r.status]||r.status}</span>`;
+    }
+
+    function progressBar(count,cap,color){
+      const hasCapacity = cap && cap>0;
+      const pct = hasCapacity ? Math.min(100,Math.round((count/cap)*100)) : 0;
+      const overCap = hasCapacity && count>cap;
+      const barColor = overCap ? 'var(--red)' : color;
+      if(!hasCapacity){
+        // Unlimited — no bar, just the count
+        return `<div style="font-size:11px;color:var(--text3);text-align:right">${count} ${t('registered_count')}</div>`;
+      }
+      return `
+        <div style="height:6px;background:var(--bg4);border-radius:3px;overflow:hidden;margin-bottom:3px">
+          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width 0.3s"></div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);text-align:right">${count} ${t('registered_count')}</div>`;
+    }
+
+    if(ev.type==='single'){
+      const count=ALL_REGS.filter(r=>r.event_id===ev.id).length;
+      return `<div style="${borderTop}">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:20px">${ev.emoji}</span>
+          <div style="flex:1">
+            <div style="font-family:var(--font-head);font-size:14px;font-weight:600">${evName(ev)}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:1px">${dayLbl?dayLbl+' · ':''}${ev.timeFR||''}</div>
+          </div>
+          ${statusBadge()}
+        </div>
+        ${progressBar(count, ev.capacity, ev.color)}
+      </div>`;
+    }else{
+      // Multi-team — one mini progress row per team
+      const teamsHTML=['A','B'].map(team=>{
+        const tCount=ALL_REGS.filter(r=>r.event_id===ev.id&&(r.team===team||r.team==='AB')).length;
+        const tReg=myEvRegs.find(r=>r.team===team||r.team==='AB');
+        const tBadge = !tReg
+          ? `<span style="font-size:10px;color:var(--text3)">${t('not_reg')}</span>`
+          : tReg.status==='pending'
+            ? `<span class="badge" style="background:${ev.colorDark};color:${ev.colorText};border:1px solid ${ev.colorBorder};font-size:10px;padding:2px 8px">${t('st_registered')}</span>`
+            : `<span class="badge ${bm[tReg.status]||'badge-gray'}" style="font-size:10px;padding:2px 8px">${sm[tReg.status]||tReg.status}</span>`;
+        const tTime=teamTimeLabel(ev,team);
+        const teamColor = team==='A' ? 'var(--blue)' : 'var(--red)';
+        return `<div style="margin-bottom:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:12px;color:var(--text2)">⚔️ Team ${team} · ${tTime}</span>
+            ${tBadge}
+          </div>
+          ${progressBar(tCount, ev.capacity, teamColor)}
         </div>`;
       }).join('');
+      return `<div style="${borderTop}">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:20px">${ev.emoji}</span>
+          <div style="flex:1">
+            <div style="font-family:var(--font-head);font-size:14px;font-weight:600">${evName(ev)}</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:1px">${dayLbl}</div>
+          </div>
+        </div>
+        ${teamsHTML}
+      </div>`;
     }
-    return `<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:var(--radius-sm);margin-bottom:8px;border:1px solid var(--border);opacity:0.6">
-      <span style="font-size:22px">${ev.emoji}</span>
-      <div style="flex:1"><div style="font-family:var(--font-head);font-size:14px;font-weight:600">${evName(ev)}</div>
-      <div style="font-size:12px;color:var(--text3)">${t('not_reg')}</div></div>
-
-    </div>`;
   }).join('');
-}
-
-function renderHomeCounters(){
-  const evs = getEvents();
-  document.getElementById('home-event-counters').innerHTML=evs.map(ev=>{
-    const evRegs=ALL_REGS.filter(r=>r.event_id===ev.id);
-    let inner='';
-    if(ev.type==='single'){
-      inner=counterGrid(evRegs,ev);
-    }else{
-      inner=['A','B'].map(team=>{
-        const tr=evRegs.filter(r=>r.team===team||r.team==='AB');
-        const ttime=teamTimeLabel(ev,team);
-        return `<div style="margin-bottom:8px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
-            <span style="font-family:var(--font-head);font-size:12px;font-weight:700;color:var(--text2)">${team==='A'?'⚔️':'⚔️'} TEAM ${team}</span>
-            <span style="font-size:10px;color:var(--text3)">🕐 ${ttime}</span>
-          </div>${counterGrid(tr,ev)}</div>`;
-      }).join('');
-    }
-    return `<div class="ev-counter-card card" style="${evStyle(ev)}">
-      <div style="font-family:var(--font-head);font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <span style="color:${ev.colorText}">${ev.emoji} ${evName(ev)}</span>
-
-      </div>${inner}
-    </div>`;
-  }).join('');
-}
-function counterGrid(list,ev){
-  const total=list.length,sel=list.filter(r=>r.status==='selected').length,res=list.filter(r=>r.status==='reserve').length,pend=list.filter(r=>r.status==='pending').length;
-  const bg=ev.colorDark,border=ev.colorBorder;
-  const cell=(n,lbl,col)=>`<div style="background:${bg};border:1px solid ${border};border-radius:6px;padding:7px 3px;text-align:center"><div style="font-family:var(--font-head);font-size:18px;font-weight:700;color:${col}">${n}</div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.4px;margin-top:1px">${lbl}</div></div>`;
-  return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">${cell(total,t('total'),'#e8eaf0')}${cell(sel,t('sel'),'var(--green)')}${cell(res,t('repl'),'var(--gold)')}${cell(pend,t('waiting'),'var(--text3)')}</div>`;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2308,8 +2378,38 @@ async function confirmDeleteEvent(){
 // ═══════════════════════════════════════════════════════════════
 //  CREATE EVENT MODAL
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+//  DAY-OF-WEEK & CAPACITY PICKERS (shared by create + edit modals)
+// ═══════════════════════════════════════════════════════════════
+let nevDaySel=null, nevCapacitySel=0;
+let eedDaySel=null, eedCapacitySel=0;
+
+function buildDayPicker(containerId,prefix){
+  const el=document.getElementById(containerId);
+  if(!el)return;
+  const shortNames=lang==='en'?DAY_SHORT_EN:DAY_SHORT_FR;
+  // Order Monday→Sunday for display, but store as JS getDay() convention (0=Sun..6=Sat)
+  const order=[1,2,3,4,5,6,0];
+  const sel=prefix==='nev'?nevDaySel:eedDaySel;
+  el.innerHTML=order.map(d=>
+    `<div class="day-opt${sel===d?' active':''}" onclick="selectDay('${prefix}',${d})">${shortNames[d]}</div>`
+  ).join('');
+}
+function selectDay(prefix,day){
+  if(prefix==='nev')nevDaySel=day; else eedDaySel=day;
+  buildDayPicker(prefix+'-day-picker',prefix);
+}
+function selectNevCapacity(cap){
+  nevCapacitySel=cap;
+  document.querySelectorAll('#nev-capacity-picker .cap-opt').forEach(o=>o.classList.toggle('active',Number(o.dataset.cap)===cap));
+}
+function selectEedCapacity(cap){
+  eedCapacitySel=cap;
+  document.querySelectorAll('#eed-capacity-picker .cap-opt').forEach(o=>o.classList.toggle('active',Number(o.dataset.cap)===cap));
+}
+
 function openCreateEventModal(){
-  nevColorSel=null;nevEmojiSel=null;nevTypeSel='single';
+  nevColorSel=null;nevEmojiSel=null;nevTypeSel='single';nevDaySel=null;nevCapacitySel=0;
   const cp=document.getElementById('nev-color-picker');
   cp.innerHTML=COLOR_PALETTE.map(c=>`<div class="color-swatch" style="background:${c.hex}" onclick="selectNevColor('${c.hex}')"></div>`).join('');
   const ep=document.getElementById('nev-emoji-picker');
@@ -2318,6 +2418,8 @@ function openCreateEventModal(){
   document.getElementById('nev-name').value='';
   ['nev-s-fr','nev-s-srv','nev-a-fr','nev-a-srv','nev-b-fr','nev-b-srv'].forEach(id=>{document.getElementById(id).value='';});
   document.getElementById('nev-err').style.display='none';
+  buildDayPicker('nev-day-picker','nev');
+  selectNevCapacity(0);
   selectEventType('single');
   document.getElementById('modal-create-event').classList.add('active');
 }
@@ -2347,7 +2449,9 @@ async function confirmCreateEvent(){
   const newEv={
     id:'ev_'+Date.now(),name,emoji:nevEmojiSel,
     color:col.hex,colorDark:col.dark,colorBorder:col.border,colorText:col.text,
-    type:nevTypeSel
+    type:nevTypeSel,
+    dayOfWeek: nevDaySel===null?null:nevDaySel,
+    capacity: nevCapacitySel||0
   };
   if(nevTypeSel==='single'){
     newEv.timeFR=document.getElementById('nev-s-fr').value||'—';
@@ -2394,6 +2498,10 @@ function openEditEventModal(id){
     document.getElementById('eed-b-srv').value=ev.timeBSRV||'';
   }
   document.getElementById('eed-warn').style.display='none';
+  eedDaySel = (ev.dayOfWeek===undefined||ev.dayOfWeek===null) ? null : ev.dayOfWeek;
+  eedCapacitySel = ev.capacity||0;
+  buildDayPicker('eed-day-picker','eed');
+  selectEedCapacity(eedCapacitySel);
   selectEditType(eedTypeSel);
   document.getElementById('modal-edit-event').classList.add('active');
 }
@@ -2414,6 +2522,8 @@ async function confirmEditEvent(){
   evs[idx].name=nameFR;
   evs[idx].nameEN=nameEN||undefined;
   evs[idx].type=eedTypeSel;
+  evs[idx].dayOfWeek = eedDaySel===null?null:eedDaySel;
+  evs[idx].capacity = eedCapacitySel||0;
 
   if(eedTypeSel==='single'){
     evs[idx].timeFR=document.getElementById('eed-s-fr').value||'—';
