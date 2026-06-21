@@ -764,7 +764,11 @@ async function saveEvent(e){
   CACHE.events=getEvents().filter(x=>x.id!==e.id);
   CACHE.events.push(e);
   const {error}=await sb.from('events').upsert(e);
-  if(error)console.error('saveEvent',error);
+  if(error){
+    console.error('saveEvent',error);
+    showToast((lang==='fr'?'Erreur de sauvegarde : ':'Save error: ')+error.message,'error');
+  }
+  return error;
 }
 async function deleteEvent(eid){
   CACHE.events=(CACHE.events||[]).filter(x=>x.id!==eid);
@@ -2462,7 +2466,8 @@ async function confirmCreateEvent(){
     newEv.timeBFR=document.getElementById('nev-b-fr').value||'—';
     newEv.timeBSRV=document.getElementById('nev-b-srv').value||'—';
   }
-  await saveEvent(newEv);
+  const saveError = await saveEvent(newEv);
+  if(saveError) return; // error toast already shown, keep modal open so the user can retry
   closeModal('create-event');
   showToast(t('toast_ev_created')+' : '+name,'success');
   renderAdmManage();renderAdmEventTabs();renderHome();renderEventsPage();
@@ -2540,7 +2545,8 @@ async function confirmEditEvent(){
     delete evs[idx].timeFR;delete evs[idx].timeSRV;
   }
 
-  await saveEvent(evs[idx]);
+  const saveError = await saveEvent(evs[idx]);
+  if(saveError) return; // error toast already shown, keep modal open so the user can retry
 
   if(typeChanged){
     await sb.from('registrations').delete().eq('event_id',editingEventId);
